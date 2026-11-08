@@ -42,7 +42,7 @@ export default function Sidebar({ activePage, isOpen, onNavigate, onClose }: Sid
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500 text-white">
               <GraduationCap className="h-5 w-5" />
             </div>
-            <span className="text-base font-semibold tracking-tight text-white">ClubHub</span>
+            <span className="text-base font-semibold tracking-tight text-white">LumiDash</span>
           </div>
           <button
             type="button"
