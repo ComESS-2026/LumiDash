@@ -39,11 +39,34 @@ function startOfDay(date: Date): Date {
 function parseEventDate(value: unknown): Date | null {
   const text = String(value ?? '').trim();
   if (!text) return null;
-  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
-  const date = iso
-    ? new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]))
-    : new Date(text);
-  return Number.isNaN(date.getTime()) ? null : startOfDay(date);
+
+  // 2026-11-14 (optionally followed by a time)
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s].*)?$/.exec(text);
+  if (iso) return toLocalDate(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+
+  // 14/11/2026, 14-11-2026 or 14.11.2026 (day first, as in Thai sheets).
+  // If the second number is above 12 it must be month/day/year instead.
+  const slashed = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})/.exec(text);
+  if (slashed) {
+    const first = Number(slashed[1]);
+    const second = Number(slashed[2]);
+    const [day, month] = second > 12 ? [second, first] : [first, second];
+    return toLocalDate(Number(slashed[3]), month, day);
+  }
+
+  // Anything else the browser understands, e.g. "14 Nov 2026"
+  const fallback = new Date(text);
+  return Number.isNaN(fallback.getTime()) ? null : startOfDay(fallback);
+}
+
+function toLocalDate(year: number, month: number, day: number): Date | null {
+  let fullYear = year;
+  if (fullYear < 100) fullYear += 2000;
+  if (fullYear > 2400) fullYear -= 543; // Buddhist Era (e.g. 2569 -> 2026)
+  const date = new Date(fullYear, month - 1, day);
+  const valid =
+    date.getFullYear() === fullYear && date.getMonth() === month - 1 && date.getDate() === day;
+  return valid ? date : null;
 }
 
 function describeDays(days: number): string {
