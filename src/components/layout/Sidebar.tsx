@@ -1,4 +1,4 @@
-import { CalendarDays, GraduationCap, LayoutDashboard, Users, X } from 'lucide-react';
+import { CalendarDays, GraduationCap, LayoutDashboard, LogOut, Users, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export type PageId = 'overview' | 'members' | 'events';
@@ -18,11 +18,20 @@ export const NAV_ITEMS: NavItem[] = [
 interface SidebarProps {
   activePage: PageId;
   isOpen: boolean;
+  userEmail: string;
   onNavigate: (page: PageId) => void;
   onClose: () => void;
+  onSignOut: () => void;
 }
 
-export default function Sidebar({ activePage, isOpen, onNavigate, onClose }: SidebarProps) {
+export default function Sidebar({
+  activePage,
+  isOpen,
+  userEmail,
+  onNavigate,
+  onClose,
+  onSignOut,
+}: SidebarProps) {
   return (
     <>
       <div
@@ -85,8 +94,18 @@ export default function Sidebar({ activePage, isOpen, onNavigate, onClose }: Sid
           })}
         </nav>
 
-        <div className="border-t border-slate-800 px-6 py-4 text-xs text-slate-500">
-          Manage members and events in one place.
+        <div className="border-t border-slate-800 px-4 py-4">
+          <p className="truncate px-2 text-xs text-slate-500" title={userEmail}>
+            {userEmail}
+          </p>
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="mt-2 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 transition duration-150 hover:bg-slate-800/60 hover:text-white"
+          >
+            <LogOut className="h-5 w-5 text-slate-500" />
+            Sign out
+          </button>
         </div>
       </aside>
     </>

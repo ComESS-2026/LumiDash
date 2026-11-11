@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import type { ComponentType } from 'react';
-import { Menu } from 'lucide-react';
+import { Loader2, Menu } from 'lucide-react';
 import Sidebar, { NAV_ITEMS } from '@/components/layout/Sidebar';
 import type { PageId } from '@/components/layout/Sidebar';
 import OverviewPage from '@/pages/OverviewPage';
 import MembersPage from '@/pages/MembersPage';
 import EventsPage from '@/pages/EventsPage';
+import AuthPage from '@/pages/AuthPage';
+import { useAuth } from '@/contexts/AuthContext';
 
 const PAGES: Record<PageId, ComponentType<{ onNavigate: (page: PageId) => void }>> = {
   overview: OverviewPage,
@@ -14,6 +16,27 @@ const PAGES: Record<PageId, ComponentType<{ onNavigate: (page: PageId) => void }
 };
 
 function App() {
+  const { user, loading, signOut } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
+      </div>
+    );
+  }
+
+  if (!user) return <AuthPage />;
+
+  return <Dashboard userEmail={user.email ?? ''} onSignOut={signOut} />;
+}
+
+interface DashboardProps {
+  userEmail: string;
+  onSignOut: () => void;
+}
+
+function Dashboard({ userEmail, onSignOut }: DashboardProps) {
   const [activePage, setActivePage] = useState<PageId>('overview');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -34,8 +57,10 @@ function App() {
       <Sidebar
         activePage={activePage}
         isOpen={isSidebarOpen}
+        userEmail={userEmail}
         onNavigate={handleNavigate}
         onClose={() => setIsSidebarOpen(false)}
+        onSignOut={onSignOut}
       />
 
       <div className="lg:pl-64">
