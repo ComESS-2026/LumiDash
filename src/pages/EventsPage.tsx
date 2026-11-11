@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
-import { CalendarPlus } from 'lucide-react';
+import { CalendarPlus, Download } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { ErrorState, LoadingState } from '@/components/ui/AsyncState';
 import PageHeader from '@/components/ui/PageHeader';
 import EventCard, { EventsEmptyState } from '@/components/events/EventCard';
 import EventFormModal from '@/components/events/EventFormModal';
+import { useAuth } from '@/contexts/AuthContext';
 import { useLoader } from '@/hooks/useLoader';
-import { deleteEvent, listEvents } from '@/lib/clubApi';
+import { deleteEvent, importSheetEvents, listEvents } from '@/lib/clubApi';
+import { fetchSheetEvents } from '@/lib/sheetEvents';
 import type { ClubEvent } from '@/types/club';
 
 type Tab = 'upcoming' | 'past';
@@ -20,6 +22,10 @@ export default function EventsPage() {
   const [deletingEvent, setDeletingEvent] = useState<ClubEvent | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const { user } = useAuth();
 
   const { upcoming, past } = useMemo(() => {
     const now = Date.now();
@@ -33,6 +39,31 @@ export default function EventsPage() {
   }, [events]);
 
   const visibleEvents = tab === 'upcoming' ? upcoming : past;
+
+  const handleImport = async () => {
+    if (!user) return;
+    setImporting(true);
+    setImportNotice(null);
+    setImportError(null);
+    try {
+      const { events: sheetEvents, skipped } = await fetchSheetEvents();
+      const imported = await importSheetEvents(user.id, sheetEvents);
+      const parts = [
+        imported > 0
+          ? `Imported ${imported} ${imported === 1 ? 'event' : 'events'} from the club sheet.`
+          : 'Every event from the club sheet is already in your calendar.',
+      ];
+      if (skipped > 0) {
+        parts.push(`${skipped} ${skipped === 1 ? 'row was' : 'rows were'} skipped because details were missing.`);
+      }
+      setImportNotice(parts.join(' '));
+      reload();
+    } catch {
+      setImportError('We could not import events from the sheet. Please try again.');
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const openCreate = () => {
     setEditingEvent(null);
@@ -76,10 +107,16 @@ export default function EventsPage() {
         title="Events"
         description="Plan meetings, workshops, and socials for your members."
         action={
-          <Button onClick={openCreate}>
-            <CalendarPlus className="h-4 w-4" />
-            New event
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={handleImport} disabled={importing || !user}>
+              <Download className="h-4 w-4" />
+              {importing ? 'Importing...' : 'Import past events from sheet'}
+            </Button>
+            <Button onClick={openCreate}>
+              <CalendarPlus className="h-4 w-4" />
+              New event
+            </Button>
+          </div>
         }
       />
 
@@ -103,6 +140,17 @@ export default function EventsPage() {
           );
         })}
       </div>
+
+      {importNotice && (
+        <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          {importNotice}
+        </p>
+      )}
+      {importError && (
+        <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {importError}
+        </p>
+      )}
 
       {loading && !events && <LoadingState />}
       {error && !events && <ErrorState message={error} onRetry={reload} />}

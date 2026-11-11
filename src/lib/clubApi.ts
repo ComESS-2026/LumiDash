@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import type { ClubEvent, EventInput, Member, MemberInput } from '@/types/club';
+import type { SheetEventImport } from '@/lib/sheetEvents';
 
 function assertNoError(error: { message: string } | null) {
   if (error) throw new Error(error.message);
@@ -41,6 +42,21 @@ export async function listEvents(): Promise<ClubEvent[]> {
 export async function createEvent(input: EventInput): Promise<void> {
   const { error } = await supabase.from('events').insert(input);
   assertNoError(error);
+}
+
+export async function importSheetEvents(userId: string, events: SheetEventImport[]): Promise<number> {
+  if (events.length === 0) return 0;
+  const rows = events.map((event) => ({
+    ...event,
+    user_id: userId,
+    category: 'Meeting',
+  }));
+  const { data, error } = await supabase
+    .from('events')
+    .upsert(rows, { onConflict: 'user_id,source_id', ignoreDuplicates: true })
+    .select('id');
+  assertNoError(error);
+  return (data ?? []).length;
 }
 
 export async function updateEvent(id: string, input: EventInput): Promise<void> {

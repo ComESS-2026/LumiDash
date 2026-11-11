@@ -8,9 +8,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 import type { PageId } from '@/components/layout/Sidebar';
-
-const SHEET_ID = '1cu5fSI8P6XUdrtwLIrDR-LmQCQqbTvxg1HYCl1a0V2g';
-const SHEET_BASE = `https://opensheet.elk.sh/${SHEET_ID}`;
+import { SHEET_BASE } from '@/lib/sheet';
 
 interface SheetMember {
   id: string;
