@@ -1,5 +1,6 @@
 import { CalendarDays, GraduationCap, LayoutDashboard, LogOut, Users, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import NotificationBell from '@/components/notifications/NotificationBell';
 
 export type PageId = 'overview' | 'members' | 'events';
 
@@ -53,14 +54,19 @@ export default function Sidebar({
             </div>
             <span className="text-base font-semibold tracking-tight text-white">LumiDash</span>
           </div>
-          <button
+          <div className = "flex items-center gap-1">
+            <div className = "hidden lg:block">
+              <NotificationBell align = "left" tone = "sidebar" />
+            </div>
+            <button
             type="button"
             onClick={onClose}
             aria-label="Close menu"
             className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white lg:hidden"
-          >
-            <X className="h-5 w-5" />
-          </button>
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>  
         </div>
 
         <p className="px-6 pb-2 pt-4 text-xs font-medium uppercase tracking-wider text-slate-500">

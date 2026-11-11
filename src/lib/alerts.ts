@@ -1,0 +1,108 @@
+export type AlertLevel = 'danger' | 'info';
+
+export interface AppAlert {
+  id: string;
+  level: AlertLevel;
+  title: string;
+  message: string;
+  detail?: string;
+}
+
+// Raw rows as they come from the Google Sheet (every value is a string).
+export interface BudgetRowRaw {
+  planned_amount?: string;
+  used_amount?: string;
+}
+
+export interface EventRowRaw {
+  id?: string;
+  event_name?: string;
+  date?: string;
+}
+
+export const BUDGET_ALERT_PERCENT = 80;
+export const EVENT_ALERT_DAYS = 3;
+
+const MS_PER_DAY = 86_400_000;
+
+function toNumber(value: unknown): number {
+  const amount = Number(String(value ?? '').replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function startOfDay(date: Date): Date {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+function parseEventDate(value: unknown): Date | null {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  const date = iso
+    ? new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]))
+    : new Date(text);
+  return Number.isNaN(date.getTime()) ? null : startOfDay(date);
+}
+
+function describeDays(days: number): string {
+  if (days === 0) return 'today';
+  if (days === 1) return 'tomorrow';
+  return `in ${days} days`;
+}
+
+/**
+ * Turns the sheet data into alerts. Nothing is hardcoded: an alert exists
+ * only while its condition is true for the data passed in.
+ */
+export function computeAlerts(
+  budget: BudgetRowRaw[],
+  events: EventRowRaw[],
+  now: Date = new Date(),
+): AppAlert[] {
+  const alerts: AppAlert[] = [];
+
+  // 1) Budget used / budget planned > 80%
+  const planned = budget.reduce((sum, row) => sum + toNumber(row.planned_amount), 0);
+  const used = budget.reduce((sum, row) => sum + toNumber(row.used_amount), 0);
+  const percent = planned > 0 ? (used / planned) * 100 : 0;
+
+  if (percent > BUDGET_ALERT_PERCENT) {
+    alerts.push({
+      id: 'budget-over-80',
+      level: 'danger',
+      title: 'Budget alert',
+      message: 'Warning: Budget usage has exceeded 80%!',
+      detail: `${percent.toFixed(1)}% of the planned budget is used.`,
+    });
+  }
+
+  // 2) Any event from today up to 3 days ahead
+  const today = startOfDay(now);
+  const upcoming: { days: number; alert: AppAlert }[] = [];
+
+  events.forEach((event, index) => {
+    const date = parseEventDate(event.date);
+    if (!date) return;
+    const days = Math.round((date.getTime() - today.getTime()) / MS_PER_DAY);
+    if (days < 0 || days > EVENT_ALERT_DAYS) return;
+
+    const name = event.event_name?.trim() || 'An event';
+    upcoming.push({
+      days,
+      alert: {
+        id: `event-${event.id ?? index}-${event.date}`,
+        level: 'info',
+        title: 'Upcoming event',
+        message: `Reminder: ${name} is ${describeDays(days)}.`,
+        detail: `Date: ${event.date}`,
+      },
+    });
+  });
+
+  upcoming.sort((a, b) => a.days - b.days);
+  upcoming.forEach((item) => alerts.push(item.alert));
+
+  return alerts;
+}

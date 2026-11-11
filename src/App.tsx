@@ -8,6 +8,8 @@ import MembersPage from '@/pages/MembersPage';
 import EventsPage from '@/pages/EventsPage';
 import AuthPage from '@/pages/AuthPage';
 import { useAuth } from '@/contexts/AuthContext';
+import ToastStack from '@/components/notifications/ToastStack';
+import NotificationBell from '@/components/notifications/NotificationBell';
 
 const PAGES: Record<PageId, ComponentType<{ onNavigate: (page: PageId) => void }>> = {
   overview: OverviewPage,
@@ -54,6 +56,7 @@ function Dashboard({ userEmail, onSignOut }: DashboardProps) {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <ToastStack />
       <Sidebar
         activePage={activePage}
         isOpen={isSidebarOpen}
@@ -74,6 +77,9 @@ function Dashboard({ userEmail, onSignOut }: DashboardProps) {
             <Menu className="h-5 w-5" />
           </button>
           <span className="ml-3 text-sm font-semibold text-slate-900 dark:text-white">LumiDash</span>
+          <div className = "ml-auto">
+            <NotificationBell align = "right" tone ="header" />
+          </div>
         </header>
 
         <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10 lg:px-10">
