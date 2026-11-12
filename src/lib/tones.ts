@@ -24,3 +24,15 @@ export const CATEGORY_TONES: Record<EventCategory, BadgeTone> = {
   Competition: 'rose',
   Fundraiser: 'amber',
 };
+
+export function rateTone(rate: number): 'emerald' | 'amber' | 'rose' {
+  if (rate >= 75) return 'emerald';
+  if (rate >= 50) return 'amber';
+  return 'rose';
+}
+
+export const RATE_BAR_CLASSES = {
+  emerald: 'bg-emerald-500',
+  amber: 'bg-amber-500',
+  rose: 'bg-rose-500',
+} as const;

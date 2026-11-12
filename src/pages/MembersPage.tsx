@@ -5,12 +5,15 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { ErrorState, LoadingState } from '@/components/ui/AsyncState';
 import PageHeader from '@/components/ui/PageHeader';
 import MemberFormModal from '@/components/members/MemberFormModal';
+import AttendanceModal from '@/components/members/AttendanceModal';
 import MembersTable from '@/components/members/MembersTable';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { useLoader } from '@/hooks/useLoader';
+import { useSheetAttendance } from '@/hooks/useSheetAttendance';
 import { deleteMember, listMembers, syncSheetMembers } from '@/lib/clubApi';
 import type { SheetSyncResult } from '@/lib/clubApi';
+import { sheetMemberKey } from '@/lib/sheetAttendance';
 import { fetchSheetMembers } from '@/lib/sheetMembers';
 import { MEMBER_STATUSES } from '@/types/club';
 import type { Member, MemberStatus } from '@/types/club';
@@ -28,6 +31,8 @@ export default function MembersPage() {
   const [deletingMember, setDeletingMember] = useState<Member | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [attendanceMember, setAttendanceMember] = useState<Member | null>(null);
+  const { summary: attendance, error: attendanceError } = useSheetAttendance();
   const [syncing, setSyncing] = useState(false);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -92,6 +97,18 @@ export default function MembersPage() {
       setSyncing(false);
     }
   };
+
+  const averageRate = useMemo(() => {
+    if (!attendance || attendance.totalEvents === 0) return null;
+    const rates = (members ?? [])
+      .map((member) => {
+        const key = sheetMemberKey(member);
+        return key ? attendance.byMember.get(key) : undefined;
+      })
+      .filter((record) => record !== undefined);
+    if (rates.length === 0) return null;
+    return Math.round(rates.reduce((sum, record) => sum + record.rate, 0) / rates.length);
+  }, [attendance, members]);
 
   const openCreate = () => {
     setEditingMember(null);
@@ -191,6 +208,25 @@ export default function MembersPage() {
         </div>
       </div>
 
+      {attendance && attendance.totalEvents > 0 && (
+        <p className="text-sm text-slate-600">
+          Attendance recorded for <span className="font-medium text-slate-900">{attendance.totalEvents}</span>{' '}
+          {attendance.totalEvents === 1 ? 'event' : 'events'}
+          {averageRate !== null && (
+            <>
+              {' '}
+              · average attendance <span className="font-medium text-slate-900">{averageRate}%</span>
+            </>
+          )}
+          . Click the calendar icon on a member to see their history.
+        </p>
+      )}
+      {attendanceError && !attendance && (
+        <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Attendance could not be loaded from the club sheet. {attendanceError}
+        </p>
+      )}
+
       {loading && !members && <LoadingState />}
       {error && !members && <ErrorState message={error} onRetry={reload} />}
       {members && members.length === 0 && (
@@ -206,8 +242,24 @@ export default function MembersPage() {
         </div>
       )}
       {filteredMembers.length > 0 && (
-        <MembersTable members={filteredMembers} onEdit={openEdit} onDelete={setDeletingMember} />
+        <MembersTable
+          members={filteredMembers}
+          attendance={attendance}
+          onEdit={openEdit}
+          onDelete={setDeletingMember}
+          onViewAttendance={setAttendanceMember}
+        />
       )}
+
+      <AttendanceModal
+        member={attendanceMember}
+        attendance={
+          attendanceMember && attendance
+            ? attendance.byMember.get(sheetMemberKey(attendanceMember) ?? '')
+            : undefined
+        }
+        onClose={() => setAttendanceMember(null)}
+      />
 
       <MemberFormModal
         open={formOpen}

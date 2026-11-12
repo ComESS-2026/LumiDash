@@ -27,6 +27,8 @@ export interface Member {
   email: string;
   student_id: string | null;
   department: string | null;
+  /** "sheet:<id>" for members copied from the Google Sheet, null for members added in the app. */
+  source_id: string | null;
   role: MemberRole;
   status: MemberStatus;
   joined_on: string;
