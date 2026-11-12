@@ -9,6 +9,7 @@ import type { LucideIcon } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 import type { PageId } from '@/components/layout/Sidebar';
 import { SHEET_BASE } from '@/lib/sheet';
+import { supabase } from '@/lib/supabase';
 
 interface SheetMember {
   id: string;
@@ -37,11 +38,17 @@ interface SheetAttendance {
   status: string;
 }
 
+interface AppCounts {
+  members: number;
+  events: number;
+}
+
 interface DashboardData {
   members: SheetMember[];
   events: SheetEvent[];
   budget: SheetBudget[];
   attendance: SheetAttendance[];
+  appCounts: AppCounts;
 }
 
 interface OverviewPageProps {
@@ -226,7 +233,19 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
           responses.map((response) => response.json()),
         )) as [SheetMember[], SheetEvent[], SheetBudget[], SheetAttendance[]];
 
-        setData({ members, events, budget, attendance });
+        // Count members and events created in the app (no source_id) so the
+        // overview totals reflect both the sheet and web-created records.
+        const [memberCount, eventCount] = await Promise.all([
+          supabase.from('members').select('id', { count: 'exact', head: true }).is('source_id', null),
+          supabase.from('events').select('id', { count: 'exact', head: true }).is('source_id', null),
+        ]);
+
+        const appCounts: AppCounts = {
+          members: memberCount.count ?? 0,
+          events: eventCount.count ?? 0,
+        };
+
+        setData({ members, events, budget, attendance, appCounts });
         hasLoaded.current = true;
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -254,8 +273,8 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
     }));
 
     return {
-      memberCount: data.members.length,
-      eventCount: data.events.length,
+      memberCount: data.members.length + data.appCounts.members,
+      eventCount: data.events.length + data.appCounts.events,
       plannedTotal,
       usedTotal,
       budgetRows,
