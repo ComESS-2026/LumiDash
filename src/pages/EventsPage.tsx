@@ -143,7 +143,7 @@ export default function EventsPage() {
         }
       />
 
-      <div className="inline-flex gap-1 rounded-lg bg-slate-200/60 p-1" role="tablist">
+      <div className="inline-flex gap-1 rounded-lg bg-slate-200/60 dark:bg-slate-800/60 p-1" role="tablist">
         {(['upcoming', 'past'] as const).map((option) => {
           const count = option === 'upcoming' ? upcoming.length : past.length;
           return (
@@ -154,23 +154,23 @@ export default function EventsPage() {
               aria-selected={tab === option}
               onClick={() => setTab(option)}
               className={`rounded-md px-4 py-1.5 text-sm font-medium capitalize transition duration-150 ${
-                tab === option ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                tab === option ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               {option}
-              <span className="ml-2 text-xs text-slate-400">{count}</span>
+              <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">{count}</span>
             </button>
           );
         })}
       </div>
 
       {syncNotice && (
-        <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+        <p role="status" className="rounded-lg bg-emerald-50 dark:bg-emerald-500/15 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-300">
           {syncNotice}
         </p>
       )}
       {syncError && (
-        <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <p role="alert" className="rounded-lg bg-rose-50 dark:bg-rose-500/15 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">
           {syncError}
         </p>
       )}

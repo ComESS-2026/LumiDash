@@ -199,9 +199,9 @@ function EventForm({ event, onClose, onSaved }: EventFormProps) {
         />
       </FormField>
 
-      {submitError && <p className="text-sm text-rose-600">{submitError}</p>}
+      {submitError && <p className="text-sm text-rose-600 dark:text-rose-400">{submitError}</p>}
 
-      <div className="flex justify-end gap-3 border-t border-slate-200 pt-5">
+      <div className="flex justify-end gap-3 border-t border-slate-200 dark:border-slate-800 pt-5">
         <Button variant="secondary" onClick={onClose} disabled={saving}>
           Cancel
         </Button>

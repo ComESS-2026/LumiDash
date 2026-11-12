@@ -22,8 +22,8 @@ export default function ConfirmDialog({
 }: ConfirmDialogProps) {
   return (
     <Modal open={open} title={title} onClose={onCancel}>
-      <p className="text-sm text-slate-600">{message}</p>
-      {error && <p className="mt-4 text-sm text-rose-600">{error}</p>}
+      <p className="text-sm text-slate-600 dark:text-slate-300">{message}</p>
+      {error && <p className="mt-4 text-sm text-rose-600 dark:text-rose-400">{error}</p>}
       <div className="mt-6 flex justify-end gap-3">
         <Button variant="secondary" onClick={onCancel} disabled={busy}>
           Cancel

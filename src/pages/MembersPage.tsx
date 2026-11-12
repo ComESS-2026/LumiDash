@@ -166,29 +166,29 @@ export default function MembersPage() {
       />
 
       {syncNotice && (
-        <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+        <p role="status" className="rounded-lg bg-emerald-50 dark:bg-emerald-500/15 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-300">
           {syncNotice}
         </p>
       )}
       {syncError && (
-        <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <p role="alert" className="rounded-lg bg-rose-50 dark:bg-rose-500/15 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">
           {syncError}
         </p>
       )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full sm:max-w-xs">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name, email, or ID"
             aria-label="Search members"
-            className="block w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
+            className="block w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 py-2 pl-9 pr-3 text-sm text-slate-900 dark:text-white shadow-sm transition placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
           />
         </div>
-        <div className="flex gap-1 overflow-x-auto rounded-lg bg-slate-200/60 p-1" role="tablist">
+        <div className="flex gap-1 overflow-x-auto rounded-lg bg-slate-200/60 dark:bg-slate-800/60 p-1" role="tablist">
           {FILTER_OPTIONS.map((option) => (
             <button
               key={option}
@@ -198,8 +198,8 @@ export default function MembersPage() {
               onClick={() => setStatusFilter(option)}
               className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium capitalize transition duration-150 ${
                 statusFilter === option
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               {option}
@@ -209,20 +209,20 @@ export default function MembersPage() {
       </div>
 
       {attendance && attendance.totalEvents > 0 && (
-        <p className="text-sm text-slate-600">
-          Attendance recorded for <span className="font-medium text-slate-900">{attendance.totalEvents}</span>{' '}
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          Attendance recorded for <span className="font-medium text-slate-900 dark:text-white">{attendance.totalEvents}</span>{' '}
           {attendance.totalEvents === 1 ? 'event' : 'events'}
           {averageRate !== null && (
             <>
               {' '}
-              · average attendance <span className="font-medium text-slate-900">{averageRate}%</span>
+              · average attendance <span className="font-medium text-slate-900 dark:text-white">{averageRate}%</span>
             </>
           )}
           . Click the calendar icon on a member to see their history.
         </p>
       )}
       {attendanceError && !attendance && (
-        <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p role="status" className="rounded-lg bg-amber-50 dark:bg-amber-500/15 px-3 py-2 text-sm text-amber-900 dark:text-amber-300">
           Attendance could not be loaded from the club sheet. {attendanceError}
         </p>
       )}
@@ -230,15 +230,15 @@ export default function MembersPage() {
       {loading && !members && <LoadingState />}
       {error && !members && <ErrorState message={error} onRetry={reload} />}
       {members && members.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
-          <p className="text-sm font-medium text-slate-900">No members yet</p>
-          <p className="mt-1 text-sm text-slate-500">Add your first member to start the roster.</p>
+        <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-6 py-16 text-center">
+          <p className="text-sm font-medium text-slate-900 dark:text-white">No members yet</p>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Add your first member to start the roster.</p>
         </div>
       )}
       {members && members.length > 0 && filteredMembers.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
-          <p className="text-sm font-medium text-slate-900">No members match your filters</p>
-          <p className="mt-1 text-sm text-slate-500">Try a different search or status.</p>
+        <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-6 py-16 text-center">
+          <p className="text-sm font-medium text-slate-900 dark:text-white">No members match your filters</p>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Try a different search or status.</p>
         </div>
       )}
       {filteredMembers.length > 0 && (

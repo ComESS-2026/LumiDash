@@ -78,23 +78,23 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12 font-sans text-slate-900">
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 px-4 py-12 font-sans text-slate-900 dark:text-white">
       <div className="w-full max-w-sm animate-scale-in">
         <div className="mb-8 flex flex-col items-center text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm">
             <GraduationCap className="h-6 w-6" />
           </div>
-          <p className="mt-4 text-lg font-semibold tracking-tight text-slate-900">LumiDash</p>
+          <p className="mt-4 text-lg font-semibold tracking-tight text-slate-900 dark:text-white">LumiDash</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm sm:p-8">
           <div className="mb-6">
-            <h1 className="text-xl font-semibold tracking-tight text-slate-900">{copy.title}</h1>
-            <p className="mt-1 text-sm text-slate-500">{copy.description}</p>
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{copy.title}</h1>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{copy.description}</p>
           </div>
 
           {notice && (
-            <p className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{notice}</p>
+            <p className="mb-4 rounded-lg bg-emerald-50 dark:bg-emerald-500/15 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-300">{notice}</p>
           )}
 
           <form onSubmit={handleSubmit} noValidate className="space-y-4">
@@ -127,7 +127,7 @@ export default function AuthPage() {
             </FormField>
 
             {error && (
-              <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              <p role="alert" className="rounded-lg bg-rose-50 dark:bg-rose-500/15 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">
                 {error}
               </p>
             )}
@@ -139,12 +139,12 @@ export default function AuthPage() {
           </form>
         </div>
 
-        <p className="mt-6 text-center text-sm text-slate-600">
+        <p className="mt-6 text-center text-sm text-slate-600 dark:text-slate-300">
           {copy.switchPrompt}{' '}
           <button
             type="button"
             onClick={switchMode}
-            className="font-medium text-emerald-700 transition hover:text-emerald-800"
+            className="font-medium text-emerald-700 dark:text-emerald-300 transition hover:text-emerald-800 dark:hover:text-emerald-300"
           >
             {copy.switchLabel}
           </button>

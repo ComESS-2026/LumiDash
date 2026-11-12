@@ -28,7 +28,7 @@ export default function AttendanceModal({ member, attendance, onClose }: Attenda
       onClose={onClose}
     >
       {!attendance || attendance.total === 0 ? (
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-slate-600 dark:text-slate-300">
           No attendance has been recorded for this member in the club sheet. Members added in the app, and members
           the sheet does not list, have no attendance records.
         </p>
@@ -36,12 +36,12 @@ export default function AttendanceModal({ member, attendance, onClose }: Attenda
         <div className="space-y-5">
           <div>
             <div className="flex items-baseline justify-between">
-              <p className="text-sm font-medium text-slate-900">
+              <p className="text-sm font-medium text-slate-900 dark:text-white">
                 Attended {attendance.attended} of {attendance.total} events
               </p>
-              <p className="text-sm font-semibold tabular-nums text-slate-900">{attendance.rate}%</p>
+              <p className="text-sm font-semibold tabular-nums text-slate-900 dark:text-white">{attendance.rate}%</p>
             </div>
-            <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-100">
+            <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
               <div
                 className={`h-full rounded-full ${RATE_BAR_CLASSES[rateTone(attendance.rate)]}`}
                 style={{ width: `${attendance.rate}%` }}
@@ -49,12 +49,12 @@ export default function AttendanceModal({ member, attendance, onClose }: Attenda
             </div>
           </div>
 
-          <ul className="max-h-96 divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200">
+          <ul className="max-h-96 divide-y divide-slate-100 dark:divide-slate-800 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800">
             {attendance.history.map((entry) => (
               <li key={entry.eventId} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-slate-900">{entry.eventName}</p>
-                  <p className="text-xs text-slate-500">{entry.date ? formatDate(entry.date) : 'Date not set'}</p>
+                  <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{entry.eventName}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{entry.date ? formatDate(entry.date) : 'Date not set'}</p>
                 </div>
                 <Badge tone={STATUS_TONES[entry.status]}>{entry.status}</Badge>
               </li>
