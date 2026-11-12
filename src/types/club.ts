@@ -26,6 +26,7 @@ export interface Member {
   full_name: string;
   email: string;
   student_id: string | null;
+  department: string | null;
   role: MemberRole;
   status: MemberStatus;
   joined_on: string;

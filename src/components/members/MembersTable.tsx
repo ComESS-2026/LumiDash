@@ -1,6 +1,7 @@
 import { Pencil, Trash2 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import { getInitials, formatDate } from '@/lib/format';
+import { isPlaceholderEmail } from '@/lib/sheetMembers';
 import { ROLE_TONES, STATUS_TONES } from '@/lib/tones';
 import type { Member } from '@/types/club';
 
@@ -36,7 +37,11 @@ export default function MembersTable({ members, onEdit, onDelete }: MembersTable
                   </div>
                   <div className="min-w-0">
                     <p className="truncate font-medium text-slate-900">{member.full_name}</p>
-                    <p className="truncate text-xs text-slate-500">{member.email}</p>
+                    <p className="truncate text-xs text-slate-500">
+                      {[member.department, isPlaceholderEmail(member.email) ? null : member.email]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
                   </div>
                 </div>
               </td>

@@ -3,8 +3,9 @@ import type { ReactNode } from 'react';
 import { SHEET_BASE } from '@/lib/sheet';
 import { computeAlerts } from '@/lib/alerts';
 import type { AppAlert, AppEventRow, BudgetRowRaw, EventRowRaw } from '@/lib/alerts';
-import { syncSheetEvents } from '@/lib/clubApi';
+import { syncSheetEvents, syncSheetMembers } from '@/lib/clubApi';
 import { parseSheetEvents } from '@/lib/sheetEvents';
+import { parseSheetMembers } from '@/lib/sheetMembers';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -17,6 +18,8 @@ interface NotificationContextValue {
   unreadCount: number;
   /** Goes up every time the sheet changed the events stored in the database. */
   eventsVersion: number;
+  /** Goes up every time the sheet changed the members stored in the database. */
+  membersVersion: number;
   isUnread: (id: string) => boolean;
   markAllRead: () => void;
   dismissToast: (id: string) => void;
@@ -53,6 +56,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<AppAlert[]>([]);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [eventsVersion, setEventsVersion] = useState(0);
+  const [membersVersion, setMembersVersion] = useState(0);
 
   const knownIds = useRef<Set<string>>(new Set());
   const checkRef = useRef<(() => Promise<void>) | null>(null);
@@ -104,6 +108,19 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           // The alerts below still use the sheet data if the database is unreachable.
         }
 
+        // Same for the member roster.
+        try {
+          const membersRes = await fetch(`${SHEET_BASE}/Members`, { signal: controller.signal });
+          if (membersRes.ok) {
+            const result = await syncSheetMembers(ownerId, parseSheetMembers(await membersRes.json()));
+            if (result.added + result.updated + result.removed > 0) {
+              setMembersVersion((version) => version + 1);
+            }
+          }
+        } catch {
+          // Members are optional for the alerts, so ignore a failed sync here.
+        }
+
         const appEvents = await loadAppEvents();
         const next = computeAlerts(budget as BudgetRowRaw[], sheetEvents as EventRowRaw[], appEvents);
         const nextIds = new Set(next.map((alert) => alert.id));
@@ -136,12 +153,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       toasts,
       unreadCount: alerts.filter((alert) => !readIds.has(alert.id)).length,
       eventsVersion,
+      membersVersion,
       isUnread: (id) => !readIds.has(id),
       markAllRead,
       dismissToast,
       refresh,
     }),
-    [alerts, toasts, readIds, eventsVersion, markAllRead, dismissToast, refresh],
+    [alerts, toasts, readIds, eventsVersion, membersVersion, markAllRead, dismissToast, refresh],
   );
 
   return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;

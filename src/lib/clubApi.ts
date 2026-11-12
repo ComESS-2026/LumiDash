@@ -2,6 +2,8 @@ import { supabase } from '@/lib/supabase';
 import type { ClubEvent, EventInput, Member, MemberInput } from '@/types/club';
 import { planSheetSync } from '@/lib/sheetEvents';
 import type { ExistingSheetEvent, SheetEventsResult } from '@/lib/sheetEvents';
+import { placeholderEmail, planMemberSync } from '@/lib/sheetMembers';
+import type { ExistingSheetMember, SheetMembersResult } from '@/lib/sheetMembers';
 
 function assertNoError(error: { message: string } | null) {
   if (error) throw new Error(error.message);
@@ -29,6 +31,52 @@ export async function updateMember(id: string, input: MemberInput): Promise<void
 export async function deleteMember(id: string): Promise<void> {
   const { error } = await supabase.from('members').delete().eq('id', id);
   assertNoError(error);
+}
+
+/**
+ * Makes the members copied from the Google Sheet match the sheet:
+ * new rows are added, changed rows are updated, deleted rows are removed.
+ * Members created in the app (no source_id) are never touched.
+ */
+export async function syncSheetMembers(userId: string, sheet: SheetMembersResult): Promise<SheetSyncResult> {
+  const { data, error } = await supabase
+    .from('members')
+    .select('id, source_id, full_name, department, status, email, student_id, role, joined_on')
+    .like('source_id', 'sheet:%');
+  assertNoError(error);
+
+  const plan = planMemberSync((data ?? []) as ExistingSheetMember[], sheet);
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (plan.toInsert.length > 0) {
+    const rows = plan.toInsert.map((member) => ({
+      user_id: userId,
+      source_id: member.source_id,
+      full_name: member.full_name,
+      department: member.department,
+      status: member.status,
+      email: member.email ?? placeholderEmail(member.source_id),
+      student_id: member.student_id ?? null,
+      role: member.role ?? 'Member',
+      joined_on: member.joined_on ?? today,
+    }));
+    const { error: insertError } = await supabase
+      .from('members')
+      .upsert(rows, { onConflict: 'user_id,source_id', ignoreDuplicates: true });
+    assertNoError(insertError);
+  }
+
+  for (const change of plan.toUpdate) {
+    const { error: updateError } = await supabase.from('members').update(change.changes).eq('id', change.id);
+    assertNoError(updateError);
+  }
+
+  if (plan.toDeleteIds.length > 0) {
+    const { error: deleteError } = await supabase.from('members').delete().in('id', plan.toDeleteIds);
+    assertNoError(deleteError);
+  }
+
+  return { added: plan.toInsert.length, updated: plan.toUpdate.length, removed: plan.toDeleteIds.length };
 }
 
 export async function listEvents(): Promise<ClubEvent[]> {
