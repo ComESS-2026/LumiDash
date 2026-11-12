@@ -1,21 +1,35 @@
-import { useEffect, useState } from 'react';
-import { fetchAttendanceSummary } from '@/lib/sheetAttendance';
+import { useCallback, useEffect, useState } from 'react';
+import { loadAppClubData } from '@/lib/clubApi';
+import { EMPTY_APP_DATA, fetchAttendanceSummary } from '@/lib/sheetAttendance';
 import type { AttendanceSummary } from '@/lib/sheetAttendance';
 
 const REFRESH_MS = 30_000;
 
-/** Per-student attendance from the club sheet, refreshed every 30 seconds. */
+/**
+ * Per-student attendance from the club sheet plus attendance recorded in the app,
+ * refreshed every 30 seconds. Call reload() to refresh right away.
+ */
 export function useSheetAttendance() {
   const [summary, setSummary] = useState<AttendanceSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const reload = useCallback(() => setReloadKey((key) => key + 1), []);
+
+  useEffect(() => {
+    const timer = window.setInterval(reload, REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [reload]);
 
   useEffect(() => {
     const controller = new AbortController();
 
     async function load() {
       try {
-        setSummary(await fetchAttendanceSummary(controller.signal));
+        // If the attendance table is not set up yet, still show the sheet's attendance.
+        const app = await loadAppClubData().catch(() => EMPTY_APP_DATA);
+        setSummary(await fetchAttendanceSummary(app, controller.signal));
         setError(null);
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -27,12 +41,8 @@ export function useSheetAttendance() {
     }
 
     void load();
-    const timer = window.setInterval(() => void load(), REFRESH_MS);
-    return () => {
-      controller.abort();
-      window.clearInterval(timer);
-    };
-  }, []);
+    return () => controller.abort();
+  }, [reloadKey]);
 
-  return { summary, error, loading };
+  return { summary, error, loading, reload };
 }

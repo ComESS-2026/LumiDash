@@ -13,7 +13,7 @@ import { useLoader } from '@/hooks/useLoader';
 import { useSheetAttendance } from '@/hooks/useSheetAttendance';
 import { deleteMember, listMembers, syncSheetMembers } from '@/lib/clubApi';
 import type { SheetSyncResult } from '@/lib/clubApi';
-import { sheetMemberKey } from '@/lib/sheetAttendance';
+import { memberKeyOf } from '@/lib/sheetAttendance';
 import { fetchSheetMembers } from '@/lib/sheetMembers';
 import { MEMBER_STATUSES } from '@/types/club';
 import type { Member, MemberStatus } from '@/types/club';
@@ -32,7 +32,7 @@ export default function MembersPage() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [attendanceMember, setAttendanceMember] = useState<Member | null>(null);
-  const { summary: attendance, error: attendanceError } = useSheetAttendance();
+  const { summary: attendance, error: attendanceError, reload: reloadAttendance } = useSheetAttendance();
   const [syncing, setSyncing] = useState(false);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -101,11 +101,8 @@ export default function MembersPage() {
   const averageRate = useMemo(() => {
     if (!attendance || attendance.totalEvents === 0) return null;
     const rates = (members ?? [])
-      .map((member) => {
-        const key = sheetMemberKey(member);
-        return key ? attendance.byMember.get(key) : undefined;
-      })
-      .filter((record) => record !== undefined);
+      .map((member) => attendance.byMember.get(memberKeyOf(member)))
+      .filter((record): record is NonNullable<typeof record> => record !== undefined && record.total > 0);
     if (rates.length === 0) return null;
     return Math.round(rates.reduce((sum, record) => sum + record.rate, 0) / rates.length);
   }, [attendance, members]);
@@ -120,9 +117,14 @@ export default function MembersPage() {
     setFormOpen(true);
   };
 
+  const handleChanged = () => {
+    reload();
+    reloadAttendance();
+  };
+
   const handleSaved = () => {
     setFormOpen(false);
-    reload();
+    handleChanged();
   };
 
   const handleConfirmDelete = async () => {
@@ -254,9 +256,7 @@ export default function MembersPage() {
       <AttendanceModal
         member={attendanceMember}
         attendance={
-          attendanceMember && attendance
-            ? attendance.byMember.get(sheetMemberKey(attendanceMember) ?? '')
-            : undefined
+          attendanceMember && attendance ? attendance.byMember.get(memberKeyOf(attendanceMember)) : undefined
         }
         onClose={() => setAttendanceMember(null)}
       />
@@ -266,6 +266,7 @@ export default function MembersPage() {
         member={editingMember}
         onClose={() => setFormOpen(false)}
         onSaved={handleSaved}
+        onChanged={handleChanged}
       />
 
       <ConfirmDialog

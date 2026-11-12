@@ -1,17 +1,27 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import Button from '@/components/ui/Button';
 import FormField, { INPUT_CLASS } from '@/components/ui/FormField';
+import MemberAttendanceFields from '@/components/members/MemberAttendanceFields';
 import Modal from '@/components/ui/Modal';
-import { createMember, updateMember } from '@/lib/clubApi';
+import {
+  createMember,
+  listEvents,
+  listMemberAttendance,
+  saveMemberAttendance,
+  updateMember,
+} from '@/lib/clubApi';
+import type { AttendanceChoice } from '@/lib/clubApi';
 import { MEMBER_ROLES, MEMBER_STATUSES } from '@/types/club';
-import type { Member, MemberInput } from '@/types/club';
+import type { ClubEvent, Member, MemberInput } from '@/types/club';
 
 interface MemberFormModalProps {
   open: boolean;
   member: Member | null;
   onClose: () => void;
   onSaved: () => void;
+  /** Called when something was saved but the form stays open (so the list can refresh). */
+  onChanged?: () => void;
 }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -46,7 +56,7 @@ function validate(form: FormState): FormErrors {
   return errors;
 }
 
-export default function MemberFormModal({ open, member, onClose, onSaved }: MemberFormModalProps) {
+export default function MemberFormModal({ open, member, onClose, onSaved, onChanged }: MemberFormModalProps) {
   return (
     <Modal
       open={open}
@@ -56,7 +66,13 @@ export default function MemberFormModal({ open, member, onClose, onSaved }: Memb
         member ? 'Update details and role for this member.' : 'Add a new student to your club roster.'
       }
     >
-      <MemberForm key={member?.id ?? 'new'} member={member} onClose={onClose} onSaved={onSaved} />
+      <MemberForm
+        key={member?.id ?? 'new'}
+        member={member}
+        onClose={onClose}
+        onSaved={onSaved}
+        onChanged={onChanged}
+      />
     </Modal>
   );
 }
@@ -65,13 +81,65 @@ interface MemberFormProps {
   member: Member | null;
   onClose: () => void;
   onSaved: () => void;
+  onChanged?: () => void;
 }
 
-function MemberForm({ member, onClose, onSaved }: MemberFormProps) {
+function describeAttendanceError(err: unknown): string {
+  const message = err instanceof Error ? err.message : '';
+  if (/attendance/i.test(message) && /(schema cache|does not exist|relation)/i.test(message)) {
+    return 'The attendance table is missing in Supabase. Run the attendance SQL, then try again.';
+  }
+  return 'Please try again.';
+}
+
+function MemberForm({ member, onClose, onSaved, onChanged }: MemberFormProps) {
   const [form, setForm] = useState<FormState>(() => getInitialState(member));
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Attendance for this member, per event id. "" = not recorded.
+  const memberId = member?.id ?? null;
+  const [events, setEvents] = useState<ClubEvent[] | null>(null);
+  const [attendance, setAttendance] = useState<Record<string, AttendanceChoice>>({});
+  const [attendanceLoading, setAttendanceLoading] = useState(true);
+  const [attendanceError, setAttendanceError] = useState<string | null>(null);
+  const initialAttendance = useRef<Record<string, AttendanceChoice>>({});
+  const savedMemberId = useRef<string | null>(memberId); // set after a new member is created
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAttendance() {
+      try {
+        const [eventList, existing] = await Promise.all([
+          listEvents(),
+          memberId ? listMemberAttendance(memberId) : Promise.resolve({} as Record<string, AttendanceChoice>),
+        ]);
+        if (cancelled) return;
+        initialAttendance.current = existing;
+        setEvents(eventList);
+        setAttendance(existing);
+      } catch (err) {
+        if (!cancelled) {
+          setAttendanceError(`Attendance could not be loaded. ${describeAttendanceError(err)}`);
+        }
+      } finally {
+        if (!cancelled) setAttendanceLoading(false);
+      }
+    }
+    void loadAttendance();
+    return () => {
+      cancelled = true;
+    };
+  }, [memberId]);
+
+  const setEventAttendance = (eventId: string, status: AttendanceChoice) => {
+    setAttendance((prev) => ({ ...prev, [eventId]: status }));
+  };
+
+  const setAllAttendance = (status: AttendanceChoice) => {
+    setAttendance(Object.fromEntries((events ?? []).map((event) => [event.id, status])));
+  };
 
   const updateField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -96,10 +164,24 @@ function MemberForm({ member, onClose, onSaved }: MemberFormProps) {
     setSaving(true);
     setSubmitError(null);
     try {
-      if (member) {
-        await updateMember(member.id, payload);
+      let id = savedMemberId.current;
+      if (id) {
+        await updateMember(id, payload);
       } else {
-        await createMember(payload);
+        const created = await createMember(payload);
+        id = created.id;
+        savedMemberId.current = id; // a retry must update this member, not create a duplicate
+      }
+      onChanged?.();
+
+      if (events && !attendanceError) {
+        try {
+          await saveMemberAttendance(id, attendance, initialAttendance.current);
+          initialAttendance.current = { ...attendance };
+        } catch (err) {
+          setSubmitError(`The member was saved, but attendance was not. ${describeAttendanceError(err)}`);
+          return;
+        }
       }
       onSaved();
     } catch (err) {
@@ -188,6 +270,16 @@ function MemberForm({ member, onClose, onSaved }: MemberFormProps) {
           onChange={(e) => updateField('joined_on', e.target.value)}
         />
       </FormField>
+
+      <MemberAttendanceFields
+        events={events}
+        loading={attendanceLoading}
+        error={attendanceError}
+        value={attendance}
+        disabled={saving}
+        onChange={setEventAttendance}
+        onSetAll={setAllAttendance}
+      />
 
       {submitError && <p className="text-sm text-rose-600 dark:text-rose-400">{submitError}</p>}
 

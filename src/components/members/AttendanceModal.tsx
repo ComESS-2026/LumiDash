@@ -24,13 +24,13 @@ export default function AttendanceModal({ member, attendance, onClose }: Attenda
     <Modal
       open={member !== null}
       title={member ? `${member.full_name}'s attendance` : 'Attendance'}
-      description="Read from the Attendance tab of the club sheet."
+      description="From the club sheet and from attendance recorded in this app."
       onClose={onClose}
     >
       {!attendance || attendance.total === 0 ? (
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          No attendance has been recorded for this member in the club sheet. Members added in the app, and members
-          the sheet does not list, have no attendance records.
+          No attendance has been recorded for this member yet. Use Edit member to record the events they attended,
+          or add them to the Attendance tab of the club sheet.
         </p>
       ) : (
         <div className="space-y-5">
@@ -51,7 +51,7 @@ export default function AttendanceModal({ member, attendance, onClose }: Attenda
 
           <ul className="max-h-96 divide-y divide-slate-100 dark:divide-slate-800 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800">
             {attendance.history.map((entry) => (
-              <li key={entry.eventId} className="flex items-center justify-between gap-3 px-4 py-3">
+              <li key={entry.eventKey} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{entry.eventName}</p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">{entry.date ? formatDate(entry.date) : 'Date not set'}</p>

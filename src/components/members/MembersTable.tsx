@@ -1,7 +1,7 @@
 import { CalendarCheck, FileSpreadsheet, Globe, Pencil, Trash2 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import { getInitials, formatDate } from '@/lib/format';
-import { sheetMemberKey } from '@/lib/sheetAttendance';
+import { memberKeyOf } from '@/lib/sheetAttendance';
 import type { AttendanceSummary } from '@/lib/sheetAttendance';
 import { isPlaceholderEmail } from '@/lib/sheetMembers';
 import { RATE_BAR_CLASSES, ROLE_TONES, STATUS_TONES, rateTone } from '@/lib/tones';
@@ -58,8 +58,7 @@ export default function MembersTable({ members, attendance, onEdit, onDelete, on
         </thead>
         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
           {members.map((member) => {
-            const key = sheetMemberKey(member);
-            const record = key && attendance ? attendance.byMember.get(key) : undefined;
+            const record = attendance ? attendance.byMember.get(memberKeyOf(member)) : undefined;
             const hasAttendance = record !== undefined && record.total > 0;
             return (
               <tr key={member.id} className="transition duration-150 hover:bg-slate-50 dark:hover:bg-slate-800/50">

@@ -8,7 +8,10 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 import type { PageId } from '@/components/layout/Sidebar';
+import { loadAppClubData } from '@/lib/clubApi';
 import { SHEET_BASE } from '@/lib/sheet';
+import { EMPTY_APP_DATA, buildAttendanceSummary } from '@/lib/sheetAttendance';
+import type { AppEventRef } from '@/lib/sheetAttendance';
 import { supabase } from '@/lib/supabase';
 
 interface SheetMember {
@@ -38,17 +41,21 @@ interface SheetAttendance {
   status: string;
 }
 
-interface AppCounts {
-  members: number;
-  events: number;
-}
-
 interface DashboardData {
   members: SheetMember[];
   events: SheetEvent[];
   budget: SheetBudget[];
   attendance: SheetAttendance[];
-  appCounts: AppCounts;
+  appMemberCount: number;
+  appEvents: AppEventRef[];
+  attendeeDelta: Map<string, number>;
+}
+
+interface AttendanceRow {
+  id: string;
+  name: string;
+  date: string;
+  attendees: number;
 }
 
 interface OverviewPageProps {
@@ -96,20 +103,20 @@ function StatCard({ label, value, hint, icon: Icon, className = '' }: StatCardPr
   );
 }
 
-function AttendanceBarChart({ events }: { events: SheetEvent[] }) {
+function AttendanceBarChart({ events }: { events: AttendanceRow[] }) {
   const rows = [...events].sort((a, b) => a.date.localeCompare(b.date));
-  const max = Math.max(...rows.map((event) => parseCount(event.attendees_count)), 1);
+  const max = Math.max(...rows.map((event) => event.attendees), 1);
 
   return (
     <div className="space-y-3" role="img" aria-label="จำนวนผู้เข้าร่วมในแต่ละกิจกรรม">
       {rows.map((event) => {
-        const attendees = parseCount(event.attendees_count);
+        const attendees = event.attendees;
         const width = Math.max((attendees / max) * 100, attendees > 0 ? 2 : 0);
         return (
           <div key={event.id}>
             <div className="mb-1 flex items-baseline justify-between gap-3 text-xs">
-              <p className="truncate font-medium text-slate-700 dark:text-slate-200" title={event.event_name}>
-                {event.event_name}
+              <p className="truncate font-medium text-slate-700 dark:text-slate-200" title={event.name}>
+                {event.name}
               </p>
               <p className="shrink-0 tabular-nums text-slate-500 dark:text-slate-400">
                 {attendees.toLocaleString('en-US')} คน
@@ -157,7 +164,6 @@ function GroupedBudgetChart({ rows }: { rows: BudgetRow[] }) {
       </div>
 
       <div className="overflow-x-auto pb-2">
-        {/* Only as wide as the categories need, so few categories fit a phone without scrolling. */}
         <div className="flex gap-2" style={{ minWidth: `${Math.max(rows.length * 56 + 32, 240)}px` }}>
           <div className="flex h-56 flex-col justify-between py-0.5 text-right text-[10px] tabular-nums text-slate-400">
             {ticks.map((tick) => (
@@ -215,12 +221,11 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
   const hasLoaded = useRef(false);
 
   useEffect(() => {
-     const timer = window.setInterval(() => setReloadKey((key) => key + 1), 30_000);
-     return () => window.clearInterval(timer);
-   }, []);
+    const timer = window.setInterval(() => setReloadKey((key) => key + 1), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
-    
     const controller = new AbortController();
     async function loadDashboard() {
       if (!hasLoaded.current) setLoading(true);
@@ -239,19 +244,28 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
           responses.map((response) => response.json()),
         )) as [SheetMember[], SheetEvent[], SheetBudget[], SheetAttendance[]];
 
-        // Count members and events created in the app (no source_id) so the
-        // overview totals reflect both the sheet and web-created records.
+        let app = EMPTY_APP_DATA;
+        try {
+          app = await loadAppClubData();
+        } catch {
+          // keep showing sheet numbers
+        }
+        const { attendeeDelta } = buildAttendanceSummary(attendance, events, members, app);
+
         const [memberCount, eventCount] = await Promise.all([
           supabase.from('members').select('id', { count: 'exact', head: true }).is('source_id', null),
           supabase.from('events').select('id', { count: 'exact', head: true }).is('source_id', null),
         ]);
 
-        const appCounts: AppCounts = {
-          members: memberCount.count ?? 0,
-          events: eventCount.count ?? 0,
-        };
-
-        setData({ members, events, budget, attendance, appCounts });
+        setData({
+          members,
+          events,
+          budget,
+          attendance,
+          appMemberCount: memberCount.count ?? app.members.filter((m) => !m.source_id).length,
+          appEvents: app.events.filter((event) => !event.source_id),
+          attendeeDelta,
+        });
         hasLoaded.current = true;
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -278,9 +292,25 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
       used: parseMoney(row.used_amount),
     }));
 
+    const attendanceRows: AttendanceRow[] = [
+      ...data.events.map((event) => ({
+        id: `sheet:${event.id}`,
+        name: event.event_name,
+        date: event.date,
+        attendees: Math.max(0, parseCount(event.attendees_count) + (data.attendeeDelta.get(`sheet:${event.id}`) ?? 0)),
+      })),
+      ...data.appEvents.map((event) => ({
+        id: `app:${event.id}`,
+        name: event.title,
+        date: new Date(event.starts_at).toLocaleDateString('sv-SE'),
+        attendees: Math.max(0, data.attendeeDelta.get(`app:${event.id}`) ?? 0),
+      })),
+    ];
+
     return {
-      memberCount: data.members.length + data.appCounts.members,
-      eventCount: data.events.length + data.appCounts.events,
+      memberCount: data.members.length + data.appMemberCount,
+      eventCount: data.events.length + data.appEvents.length,
+      attendanceRows,
       plannedTotal,
       usedTotal,
       budgetRows,
@@ -330,18 +360,17 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
 
       {summary && data && (
         <>
-          {/* 1 column on phones, 2 on small tablets (third card spans the row), 3 from lg up. */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <StatCard
               label="Total Active Members"
               value={summary.memberCount.toLocaleString('en-US')}
-              hint="จำนวนสมาชิกทั้งหมดจากแท็บ Members"
+              hint="จำนวนสมาชิกทั้งหมดจากแท็บ Members รวมสมาชิกที่เพิ่มในเว็บ"
               icon={Users}
             />
             <StatCard
               label="Total Events Conducted"
               value={summary.eventCount.toLocaleString('en-US')}
-              hint="จำนวนกิจกรรมทั้งหมดจากแท็บ Events"
+              hint="จำนวนกิจกรรมทั้งหมดจากแท็บ Events รวมกิจกรรมที่เพิ่มในเว็บ"
               icon={CalendarDays}
             />
             <StatCard
@@ -358,13 +387,13 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
               <header className="mb-5">
                 <h2 className="text-base font-semibold text-slate-900 dark:text-white">ผู้เข้าร่วมแต่ละกิจกรรม</h2>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Bar chart จาก attendees_count และ event_name
+                  จาก attendees_count ในชีต รวมผู้เข้าร่วมที่บันทึกในเว็บ
                 </p>
               </header>
-              {data.events.length === 0 ? (
+              {summary.attendanceRows.length === 0 ? (
                 <p className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">ยังไม่มีข้อมูลกิจกรรม</p>
               ) : (
-                <AttendanceBarChart events={data.events} />
+                <AttendanceBarChart events={summary.attendanceRows} />
               )}
             </section>
 
