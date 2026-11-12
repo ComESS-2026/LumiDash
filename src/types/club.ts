@@ -48,6 +48,8 @@ export interface ClubEvent {
   category: EventCategory;
   starts_at: string;
   capacity: number | null;
+  /** "sheet:<id>" for events copied from the Google Sheet, null for events added in the app. */
+  source_id: string | null;
   created_at: string;
 }
 

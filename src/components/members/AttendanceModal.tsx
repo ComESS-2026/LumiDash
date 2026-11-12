@@ -49,7 +49,7 @@ export default function AttendanceModal({ member, attendance, onClose }: Attenda
             </div>
           </div>
 
-          <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+          <ul className="max-h-96 divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200">
             {attendance.history.map((entry) => (
               <li key={entry.eventId} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">

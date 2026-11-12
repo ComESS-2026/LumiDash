@@ -1,4 +1,4 @@
-import { CalendarPlus, Clock, MapPin, Pencil, Trash2, Users } from 'lucide-react';
+import { CalendarPlus, Clock, FileSpreadsheet, Globe, MapPin, Pencil, Trash2, Users } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import { CATEGORY_TONES } from '@/lib/tones';
 import { formatDateTime } from '@/lib/format';
@@ -9,6 +9,30 @@ interface EventCardProps {
   isPast: boolean;
   onEdit: (event: ClubEvent) => void;
   onDelete: (event: ClubEvent) => void;
+}
+
+function EventSourceBadge({ event }: { event: ClubEvent }) {
+  const fromSheet = Boolean(event.source_id);
+  if (fromSheet) {
+    return (
+      <span
+        title="Copied from the Google Sheet"
+        className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 ring-1 ring-inset ring-sky-600/20"
+      >
+        <FileSpreadsheet className="h-3 w-3" />
+        Sheet
+      </span>
+    );
+  }
+  return (
+    <span
+      title="Created in the web app"
+      className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20"
+    >
+      <Globe className="h-3 w-3" />
+      Web
+    </span>
+  );
 }
 
 export default function EventCard({ event, isPast, onEdit, onDelete }: EventCardProps) {
@@ -31,6 +55,7 @@ export default function EventCard({ event, isPast, onEdit, onDelete }: EventCard
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-base font-semibold text-slate-900">{event.title}</h3>
           <Badge tone={CATEGORY_TONES[event.category]}>{event.category}</Badge>
+          <EventSourceBadge event={event} />
         </div>
         {event.description && (
           <p className="mt-1 line-clamp-2 text-sm text-slate-600">{event.description}</p>

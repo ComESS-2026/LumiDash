@@ -1,4 +1,4 @@
-import { CalendarCheck, Pencil, Trash2 } from 'lucide-react';
+import { CalendarCheck, FileSpreadsheet, Globe, Pencil, Trash2 } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import { getInitials, formatDate } from '@/lib/format';
 import { sheetMemberKey } from '@/lib/sheetAttendance';
@@ -13,6 +13,30 @@ interface MembersTableProps {
   onEdit: (member: Member) => void;
   onDelete: (member: Member) => void;
   onViewAttendance: (member: Member) => void;
+}
+
+function SourceBadge({ member }: { member: Member }) {
+  const fromSheet = Boolean(member.source_id);
+  if (fromSheet) {
+    return (
+      <span
+        title="Copied from the Google Sheet"
+        className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 ring-1 ring-inset ring-sky-600/20"
+      >
+        <FileSpreadsheet className="h-3 w-3" />
+        Sheet
+      </span>
+    );
+  }
+  return (
+    <span
+      title="Created in the web app"
+      className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20"
+    >
+      <Globe className="h-3 w-3" />
+      Web
+    </span>
+  );
 }
 
 export default function MembersTable({ members, attendance, onEdit, onDelete, onViewAttendance }: MembersTableProps) {
@@ -45,7 +69,10 @@ export default function MembersTable({ members, attendance, onEdit, onDelete, on
                       {getInitials(member.full_name)}
                     </div>
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-slate-900">{member.full_name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-medium text-slate-900">{member.full_name}</p>
+                        <SourceBadge member={member} />
+                      </div>
                       <p className="truncate text-xs text-slate-500">
                         {[member.department, isPlaceholderEmail(member.email) ? null : member.email]
                           .filter(Boolean)
