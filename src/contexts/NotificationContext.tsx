@@ -1,22 +1,49 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { SHEET_BASE } from '@/lib/sheet';
 import { computeAlerts } from '@/lib/alerts';
-import type { AppAlert, BudgetRowRaw, EventRowRaw } from '@/lib/alerts';
+import type { AppAlert, AppEventRow, BudgetRowRaw, EventRowRaw } from '@/lib/alerts';
+import { syncSheetEvents } from '@/lib/clubApi';
+import { parseSheetEvents } from '@/lib/sheetEvents';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 
-const REFRESH_MS = 60_000;
+// OpenSheet caches the sheet for about 30 seconds, so checking more often is pointless.
+const REFRESH_MS = 30_000;
 
 interface NotificationContextValue {
   alerts: AppAlert[];
   toasts: AppAlert[];
   unreadCount: number;
+  /** Goes up every time the sheet changed the events stored in the database. */
+  eventsVersion: number;
   isUnread: (id: string) => boolean;
   markAllRead: () => void;
   dismissToast: (id: string) => void;
+  /** Re-read the sheet and the database right now. */
+  refresh: () => void;
 }
 
 const NotificationContext = createContext<NotificationContextValue | null>(null);
+
+// Events created on the app's Events page. If this fails (no table yet, offline),
+// we still show the alerts that come from the Google Sheet.
+async function loadAppEvents(): Promise<AppEventRow[]> {
+  try {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const { data, error } = await supabase
+      .from('events')
+      .select('id, title, starts_at')
+      .gte('starts_at', startOfToday.toISOString())
+      .order('starts_at', { ascending: true })
+      .limit(100);
+    if (error || !data) return [];
+    return data as AppEventRow[];
+  } catch {
+    return [];
+  }
+}
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -25,6 +52,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [alerts, setAlerts] = useState<AppAlert[]>([]);
   const [toasts, setToasts] = useState<AppAlert[]>([]);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [eventsVersion, setEventsVersion] = useState(0);
+
+  const knownIds = useRef<Set<string>>(new Set());
+  const checkRef = useRef<(() => Promise<void>) | null>(null);
 
   const dismissToast = useCallback((id: string) => {
     setToasts((current) => current.filter((toast) => toast.id !== id));
@@ -34,16 +65,22 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     setReadIds(new Set(alerts.map((alert) => alert.id)));
   }, [alerts]);
 
+  const refresh = useCallback(() => {
+    void checkRef.current?.();
+  }, []);
+
   useEffect(() => {
     if (!userId) {
       setAlerts([]);
       setToasts([]);
       setReadIds(new Set());
+      knownIds.current = new Set();
+      checkRef.current = null;
       return;
     }
 
+    const ownerId: string = userId;
     const controller = new AbortController();
-    const knownIds = new Set<string>();
 
     async function check() {
       try {
@@ -54,16 +91,26 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         if (!budgetRes.ok || !eventsRes.ok) return;
 
         const budget: unknown = await budgetRes.json();
-        const events: unknown = await eventsRes.json();
-        if (!Array.isArray(budget) || !Array.isArray(events)) return;
+        const sheetEvents: unknown = await eventsRes.json();
+        if (!Array.isArray(budget) || !Array.isArray(sheetEvents)) return;
 
-        const next = computeAlerts(budget as BudgetRowRaw[], events as EventRowRaw[]);
+        // Keep the Events page in step with the sheet: add, update and remove events.
+        try {
+          const result = await syncSheetEvents(ownerId, parseSheetEvents(sheetEvents));
+          if (result.added + result.updated + result.removed > 0) {
+            setEventsVersion((version) => version + 1);
+          }
+        } catch {
+          // The alerts below still use the sheet data if the database is unreachable.
+        }
+
+        const appEvents = await loadAppEvents();
+        const next = computeAlerts(budget as BudgetRowRaw[], sheetEvents as EventRowRaw[], appEvents);
         const nextIds = new Set(next.map((alert) => alert.id));
 
         // Toast only alerts that just appeared; forget ones whose condition cleared.
-        const fresh = next.filter((alert) => !knownIds.has(alert.id));
-        knownIds.clear();
-        nextIds.forEach((id) => knownIds.add(id));
+        const fresh = next.filter((alert) => !knownIds.current.has(alert.id));
+        knownIds.current = nextIds;
 
         setAlerts(next);
         setReadIds((prev) => new Set([...prev].filter((id) => nextIds.has(id))));
@@ -74,6 +121,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    checkRef.current = check;
     void check();
     const timer = window.setInterval(() => void check(), REFRESH_MS);
     return () => {
@@ -87,11 +135,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       alerts,
       toasts,
       unreadCount: alerts.filter((alert) => !readIds.has(alert.id)).length,
+      eventsVersion,
       isUnread: (id) => !readIds.has(id),
       markAllRead,
       dismissToast,
+      refresh,
     }),
-    [alerts, toasts, readIds, markAllRead, dismissToast],
+    [alerts, toasts, readIds, eventsVersion, markAllRead, dismissToast, refresh],
   );
 
   return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;

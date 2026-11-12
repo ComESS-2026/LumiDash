@@ -20,6 +20,13 @@ export interface EventRowRaw {
   date?: string;
 }
 
+// Events created on the app's Events page (Supabase `events` table).
+export interface AppEventRow {
+  id: string;
+  title: string;
+  starts_at: string;
+}
+
 export const BUDGET_ALERT_PERCENT = 80;
 export const EVENT_ALERT_DAYS = 3;
 
@@ -36,7 +43,7 @@ function startOfDay(date: Date): Date {
   return copy;
 }
 
-function parseEventDate(value: unknown): Date | null {
+export function parseEventDate(value: unknown): Date | null {
   const text = String(value ?? '').trim();
   if (!text) return null;
 
@@ -75,13 +82,28 @@ function describeDays(days: number): string {
   return `in ${days} days`;
 }
 
+interface UpcomingCandidate {
+  key: string;
+  name: string;
+  date: Date;
+  label: string;
+}
+
+function formatDay(date: Date): string {
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 /**
- * Turns the sheet data into alerts. Nothing is hardcoded: an alert exists
+ * Turns the club data into alerts. Nothing is hardcoded: an alert exists
  * only while its condition is true for the data passed in.
+ *
+ * - sheetEvents: rows from the Google Sheet "Events" tab
+ * - appEvents:   events created on the app's Events page (Supabase)
  */
 export function computeAlerts(
   budget: BudgetRowRaw[],
-  events: EventRowRaw[],
+  sheetEvents: EventRowRaw[],
+  appEvents: AppEventRow[] = [],
   now: Date = new Date(),
 ): AppAlert[] {
   const alerts: AppAlert[] = [];
@@ -101,28 +123,52 @@ export function computeAlerts(
     });
   }
 
-  // 2) Any event from today up to 3 days ahead
+  // 2) Any event from today up to 3 days ahead, from the sheet or the app
+  const candidates: UpcomingCandidate[] = [];
+
+  for (const event of sheetEvents) {
+    const date = parseEventDate(event.date);
+    if (!date) continue;
+    const name = event.event_name?.trim() || 'An event';
+    candidates.push({ key: `${name.toLowerCase()}|${date.getTime()}`, name, date, label: formatDay(date) });
+  }
+
+  for (const event of appEvents) {
+    const start = new Date(event.starts_at);
+    if (Number.isNaN(start.getTime())) continue;
+    const date = startOfDay(start);
+    const name = event.title?.trim() || 'An event';
+    const time = start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    candidates.push({
+      key: `${name.toLowerCase()}|${date.getTime()}`,
+      name,
+      date,
+      label: `${formatDay(date)}, ${time}`,
+    });
+  }
+
   const today = startOfDay(now);
+  const seen = new Set<string>();
   const upcoming: { days: number; alert: AppAlert }[] = [];
 
-  events.forEach((event, index) => {
-    const date = parseEventDate(event.date);
-    if (!date) return;
-    const days = Math.round((date.getTime() - today.getTime()) / MS_PER_DAY);
-    if (days < 0 || days > EVENT_ALERT_DAYS) return;
+  for (const candidate of candidates) {
+    if (seen.has(candidate.key)) continue; // same event in the sheet and the app
+    seen.add(candidate.key);
 
-    const name = event.event_name?.trim() || 'An event';
+    const days = Math.round((candidate.date.getTime() - today.getTime()) / MS_PER_DAY);
+    if (days < 0 || days > EVENT_ALERT_DAYS) continue;
+
     upcoming.push({
       days,
       alert: {
-        id: `event-${event.id ?? index}-${event.date}`,
+        id: `event-${candidate.key}`,
         level: 'info',
         title: 'Upcoming event',
-        message: `Reminder: ${name} is ${describeDays(days)}.`,
-        detail: `Date: ${event.date}`,
+        message: `Reminder: ${candidate.name} is ${describeDays(days)}.`,
+        detail: `Date: ${candidate.label}`,
       },
     });
-  });
+  }
 
   upcoming.sort((a, b) => a.days - b.days);
   upcoming.forEach((item) => alerts.push(item.alert));

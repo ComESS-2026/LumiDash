@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { CalendarPlus, Download } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { CalendarPlus, RefreshCw } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { ErrorState, LoadingState } from '@/components/ui/AsyncState';
@@ -7,8 +7,10 @@ import PageHeader from '@/components/ui/PageHeader';
 import EventCard, { EventsEmptyState } from '@/components/events/EventCard';
 import EventFormModal from '@/components/events/EventFormModal';
 import { useAuth } from '@/contexts/AuthContext';
+import { useNotifications } from '@/contexts/NotificationContext';
 import { useLoader } from '@/hooks/useLoader';
-import { deleteEvent, importSheetEvents, listEvents } from '@/lib/clubApi';
+import { deleteEvent, listEvents, syncSheetEvents } from '@/lib/clubApi';
+import type { SheetSyncResult } from '@/lib/clubApi';
 import { fetchSheetEvents } from '@/lib/sheetEvents';
 import type { ClubEvent } from '@/types/club';
 
@@ -22,10 +24,21 @@ export default function EventsPage() {
   const [deletingEvent, setDeletingEvent] = useState<ClubEvent | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [importing, setImporting] = useState(false);
-  const [importNotice, setImportNotice] = useState<string | null>(null);
-  const [importError, setImportError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const { user } = useAuth();
+  const { eventsVersion, refresh } = useNotifications();
+
+  // The background check copies sheet changes into the database; show them right away.
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    void reload();
+  }, [eventsVersion, reload]);
 
   const { upcoming, past } = useMemo(() => {
     const now = Date.now();
@@ -40,28 +53,38 @@ export default function EventsPage() {
 
   const visibleEvents = tab === 'upcoming' ? upcoming : past;
 
-  const handleImport = async () => {
+  const describeSync = (result: SheetSyncResult, skipped: number) => {
+    const changes = [
+      result.added > 0 ? `${result.added} added` : null,
+      result.updated > 0 ? `${result.updated} updated` : null,
+      result.removed > 0 ? `${result.removed} removed` : null,
+    ].filter(Boolean);
+    const parts = [
+      changes.length > 0
+        ? `Synced with the club sheet: ${changes.join(', ')}.`
+        : 'Already up to date with the club sheet.',
+    ];
+    if (skipped > 0) {
+      parts.push(`${skipped} ${skipped === 1 ? 'row was' : 'rows were'} skipped because details were missing.`);
+    }
+    return parts.join(' ');
+  };
+
+  const handleSync = async () => {
     if (!user) return;
-    setImporting(true);
-    setImportNotice(null);
-    setImportError(null);
+    setSyncing(true);
+    setSyncNotice(null);
+    setSyncError(null);
     try {
-      const { events: sheetEvents, skipped } = await fetchSheetEvents();
-      const imported = await importSheetEvents(user.id, sheetEvents);
-      const parts = [
-        imported > 0
-          ? `Imported ${imported} ${imported === 1 ? 'event' : 'events'} from the club sheet.`
-          : 'Every event from the club sheet is already in your calendar.',
-      ];
-      if (skipped > 0) {
-        parts.push(`${skipped} ${skipped === 1 ? 'row was' : 'rows were'} skipped because details were missing.`);
-      }
-      setImportNotice(parts.join(' '));
-      reload();
+      const sheet = await fetchSheetEvents();
+      const result = await syncSheetEvents(user.id, sheet);
+      setSyncNotice(describeSync(result, sheet.skipped));
+      void reload();
+      refresh();
     } catch {
-      setImportError('We could not import events from the sheet. Please try again.');
+      setSyncError('We could not sync events from the sheet. Please try again.');
     } finally {
-      setImporting(false);
+      setSyncing(false);
     }
   };
 
@@ -108,9 +131,9 @@ export default function EventsPage() {
         description="Plan meetings, workshops, and socials for your members."
         action={
           <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={handleImport} disabled={importing || !user}>
-              <Download className="h-4 w-4" />
-              {importing ? 'Importing...' : 'Import past events from sheet'}
+            <Button variant="secondary" onClick={handleSync} disabled={syncing || !user}>
+              <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Syncing...' : 'Sync from sheet'}
             </Button>
             <Button onClick={openCreate}>
               <CalendarPlus className="h-4 w-4" />
@@ -141,14 +164,14 @@ export default function EventsPage() {
         })}
       </div>
 
-      {importNotice && (
+      {syncNotice && (
         <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          {importNotice}
+          {syncNotice}
         </p>
       )}
-      {importError && (
+      {syncError && (
         <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
-          {importError}
+          {syncError}
         </p>
       )}
 

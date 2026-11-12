@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import type { ClubEvent, EventInput, Member, MemberInput } from '@/types/club';
-import type { SheetEventImport } from '@/lib/sheetEvents';
+import { planSheetSync } from '@/lib/sheetEvents';
+import type { ExistingSheetEvent, SheetEventsResult } from '@/lib/sheetEvents';
 
 function assertNoError(error: { message: string } | null) {
   if (error) throw new Error(error.message);
@@ -44,19 +45,48 @@ export async function createEvent(input: EventInput): Promise<void> {
   assertNoError(error);
 }
 
-export async function importSheetEvents(userId: string, events: SheetEventImport[]): Promise<number> {
-  if (events.length === 0) return 0;
-  const rows = events.map((event) => ({
-    ...event,
-    user_id: userId,
-    category: 'Meeting',
-  }));
+export interface SheetSyncResult {
+  added: number;
+  updated: number;
+  removed: number;
+}
+
+/**
+ * Makes the events copied from the Google Sheet match the sheet:
+ * new rows are added, changed rows are updated, deleted rows are removed.
+ * Events created in the app (no source_id) are never touched.
+ */
+export async function syncSheetEvents(userId: string, sheet: SheetEventsResult): Promise<SheetSyncResult> {
   const { data, error } = await supabase
     .from('events')
-    .upsert(rows, { onConflict: 'user_id,source_id', ignoreDuplicates: true })
-    .select('id');
+    .select('id, source_id, title, starts_at')
+    .like('source_id', 'sheet:%');
   assertNoError(error);
-  return (data ?? []).length;
+
+  const plan = planSheetSync((data ?? []) as ExistingSheetEvent[], sheet);
+
+  if (plan.toInsert.length > 0) {
+    const rows = plan.toInsert.map((event) => ({ ...event, user_id: userId, category: 'Meeting' }));
+    const { error: insertError } = await supabase
+      .from('events')
+      .upsert(rows, { onConflict: 'user_id,source_id', ignoreDuplicates: true });
+    assertNoError(insertError);
+  }
+
+  for (const change of plan.toUpdate) {
+    const { error: updateError } = await supabase
+      .from('events')
+      .update({ title: change.title, starts_at: change.starts_at })
+      .eq('id', change.id);
+    assertNoError(updateError);
+  }
+
+  if (plan.toDeleteIds.length > 0) {
+    const { error: deleteError } = await supabase.from('events').delete().in('id', plan.toDeleteIds);
+    assertNoError(deleteError);
+  }
+
+  return { added: plan.toInsert.length, updated: plan.toUpdate.length, removed: plan.toDeleteIds.length };
 }
 
 export async function updateEvent(id: string, input: EventInput): Promise<void> {

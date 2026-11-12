@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarDays,
   Loader2,
@@ -199,12 +199,18 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const hasLoaded = useRef(false);
 
   useEffect(() => {
-    const controller = new AbortController();
+     const timer = window.setInterval(() => setReloadKey((key) => key + 1), 30_000);
+     return () => window.clearInterval(timer);
+   }, []);
 
+  useEffect(() => {
+    
+    const controller = new AbortController();
     async function loadDashboard() {
-      setLoading(true);
+      if (!hasLoaded.current) setLoading(true);
       setError(null);
       try {
         const endpoints = ['Members', 'Events', 'Budget', 'Attendance'] as const;
@@ -221,8 +227,10 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
         )) as [SheetMember[], SheetEvent[], SheetBudget[], SheetAttendance[]];
 
         setData({ members, events, budget, attendance });
+        hasLoaded.current = true;
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (hasLoaded.current) return;
         setError(err instanceof Error ? err.message : 'โหลดข้อมูลไม่สำเร็จ');
       } finally {
         if (!controller.signal.aborted) setLoading(false);
