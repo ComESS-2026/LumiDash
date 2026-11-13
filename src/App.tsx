@@ -46,7 +46,7 @@ function Dashboard({ userEmail, onSignOut }: DashboardProps) {
   const isDark = theme === 'dark';
 
   useEffect(() => {
-    document.title = `${NAV_ITEMS.find((item) => item.id === activePage)?.label} | ClubHub`;
+    document.title = `${NAV_ITEMS.find((item) => item.id === activePage)?.label} | LumiDash`;
   }, [activePage]);
 
   const handleNavigate = (page: PageId) => {

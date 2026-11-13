@@ -47,7 +47,8 @@ export default function MembersPage() {
       return;
     }
     void reload();
-  }, [membersVersion, reload]);
+    reloadAttendance(); // new or removed members change the attendance numbers too
+  }, [membersVersion, reload, reloadAttendance]);
 
   const filteredMembers = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -74,7 +75,10 @@ export default function MembersPage() {
         : 'Already up to date with the club sheet.',
     ];
     if (skipped > 0) {
-      parts.push(`${skipped} ${skipped === 1 ? 'row was' : 'rows were'} skipped because details were missing.`);
+      parts.push(`${skipped} ${skipped === 1 ? 'row was' : 'rows were'} skipped (missing or repeated id, name or date).`);
+    }
+    if (result.failed > 0) {
+      parts.push(`${result.failed} could not be saved (for example an email that is already used).`);
     }
     return parts.join(' ');
   };
@@ -134,7 +138,7 @@ export default function MembersPage() {
     try {
       await deleteMember(deletingMember.id);
       setDeletingMember(null);
-      reload();
+      handleChanged();
     } catch {
       setDeleteError('We could not delete this member. Please try again.');
     } finally {
@@ -212,15 +216,16 @@ export default function MembersPage() {
 
       {attendance && attendance.totalEvents > 0 && (
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          Attendance recorded for <span className="font-medium text-slate-900 dark:text-white">{attendance.totalEvents}</span>{' '}
-          {attendance.totalEvents === 1 ? 'event' : 'events'}
+          Each percentage counts only the events recorded for that member
           {averageRate !== null && (
             <>
               {' '}
-              · average attendance <span className="font-medium text-slate-900 dark:text-white">{averageRate}%</span>
+              · average <span className="font-medium text-slate-900 dark:text-white">{averageRate}%</span>
             </>
           )}
-          . Click the calendar icon on a member to see their history.
+          {' '}
+          · {attendance.totalEvents} {attendance.totalEvents === 1 ? 'event has' : 'events have'} attendance records.
+          Click the calendar icon on a member to see their history.
         </p>
       )}
       {attendanceError && !attendance && (
@@ -272,7 +277,11 @@ export default function MembersPage() {
       <ConfirmDialog
         open={deletingMember !== null}
         title="Remove member"
-        message={`Remove ${deletingMember?.full_name ?? 'this member'} from the roster? This cannot be undone.`}
+        message={`Remove ${deletingMember?.full_name ?? 'this member'} from the roster? This cannot be undone.${
+          deletingMember?.source_id
+            ? ' This member comes from the club sheet, so they will be added back at the next sync unless you also delete their row in the sheet.'
+            : ''
+        }`}
         busy={deleteBusy}
         error={deleteError}
         onConfirm={handleConfirmDelete}

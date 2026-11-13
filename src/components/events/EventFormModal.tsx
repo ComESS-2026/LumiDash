@@ -86,6 +86,7 @@ interface EventFormProps {
 }
 
 function EventForm({ event, onClose, onSaved }: EventFormProps) {
+  const fromSheet = Boolean(event?.source_id);
   const [form, setForm] = useState<EventFormState>(() => getInitialState(event));
   const [errors, setErrors] = useState<EventFormErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -129,9 +130,17 @@ function EventForm({ event, onClose, onSaved }: EventFormProps) {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-5">
+      {fromSheet && (
+        <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:bg-sky-500/15 dark:text-sky-300">
+          This event comes from the club sheet. Title and start time are controlled by the sheet, so change them there.
+          Category, location, capacity and description can be edited here.
+        </p>
+      )}
+
       <FormField label="Title" htmlFor="event-title" error={errors.title}>
         <input
           id="event-title"
+          disabled={fromSheet}
           className={INPUT_CLASS}
           value={form.title}
           onChange={(e) => updateField('title', e.target.value)}
@@ -159,6 +168,7 @@ function EventForm({ event, onClose, onSaved }: EventFormProps) {
           <input
             id="event-starts"
             type="datetime-local"
+            disabled={fromSheet}
             className={INPUT_CLASS}
             value={form.starts_at}
             onChange={(e) => updateField('starts_at', e.target.value)}

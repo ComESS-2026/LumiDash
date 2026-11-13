@@ -85,56 +85,79 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
     const ownerId: string = userId;
     const controller = new AbortController();
+    let running = false;
+    let pending = false;
 
-    async function check() {
+    // One tab of the sheet. null = this tab could not be read (missing, or the sheet is unreachable).
+    async function fetchTab(tab: string): Promise<unknown[] | null> {
       try {
-        const [budgetRes, eventsRes] = await Promise.all([
-          fetch(`${SHEET_BASE}/Budget`, { signal: controller.signal }),
-          fetch(`${SHEET_BASE}/Events`, { signal: controller.signal }),
-        ]);
-        if (!budgetRes.ok || !eventsRes.ok) return;
+        const response = await fetch(`${SHEET_BASE}/${tab}`, { signal: controller.signal });
+        if (!response.ok) return null;
+        const body: unknown = await response.json();
+        return Array.isArray(body) ? body : null;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') throw err;
+        return null;
+      }
+    }
 
-        const budget: unknown = await budgetRes.json();
-        const sheetEvents: unknown = await eventsRes.json();
-        if (!Array.isArray(budget) || !Array.isArray(sheetEvents)) return;
+    async function runOnce() {
+      // Each tab is handled on its own, so a broken Budget tab cannot stop the members sync (and so on).
+      const [budget, sheetEvents, sheetMembers] = await Promise.all([
+        fetchTab('Budget'),
+        fetchTab('Events'),
+        fetchTab('Members'),
+      ]);
+      if (budget === null && sheetEvents === null && sheetMembers === null) return; // keep the last alerts
 
-        // Keep the Events page in step with the sheet: add, update and remove events.
+      // Keep the Events and Members pages in step with the sheet.
+      if (sheetEvents) {
         try {
           const result = await syncSheetEvents(ownerId, parseSheetEvents(sheetEvents));
-          if (result.added + result.updated + result.removed > 0) {
-            setEventsVersion((version) => version + 1);
-          }
+          if (result.added + result.updated + result.removed > 0) setEventsVersion((version) => version + 1);
         } catch {
           // The alerts below still use the sheet data if the database is unreachable.
         }
-
-        // Same for the member roster.
+      }
+      if (sheetMembers) {
         try {
-          const membersRes = await fetch(`${SHEET_BASE}/Members`, { signal: controller.signal });
-          if (membersRes.ok) {
-            const result = await syncSheetMembers(ownerId, parseSheetMembers(await membersRes.json()));
-            if (result.added + result.updated + result.removed > 0) {
-              setMembersVersion((version) => version + 1);
-            }
-          }
+          const result = await syncSheetMembers(ownerId, parseSheetMembers(sheetMembers));
+          if (result.added + result.updated + result.removed > 0) setMembersVersion((version) => version + 1);
         } catch {
           // Members are optional for the alerts, so ignore a failed sync here.
         }
+      }
 
-        const appEvents = await loadAppEvents();
-        const next = computeAlerts(budget as BudgetRowRaw[], sheetEvents as EventRowRaw[], appEvents);
-        const nextIds = new Set(next.map((alert) => alert.id));
+      const appEvents = await loadAppEvents();
+      const next = computeAlerts((budget ?? []) as BudgetRowRaw[], (sheetEvents ?? []) as EventRowRaw[], appEvents);
+      const nextIds = new Set(next.map((alert) => alert.id));
 
-        // Toast only alerts that just appeared; forget ones whose condition cleared.
-        const fresh = next.filter((alert) => !knownIds.current.has(alert.id));
-        knownIds.current = nextIds;
+      // Toast only alerts that just appeared; forget ones whose condition cleared.
+      const fresh = next.filter((alert) => !knownIds.current.has(alert.id));
+      knownIds.current = nextIds;
 
-        setAlerts(next);
-        setReadIds((prev) => new Set([...prev].filter((id) => nextIds.has(id))));
-        if (fresh.length > 0) setToasts((current) => [...current, ...fresh]);
+      setAlerts(next);
+      setReadIds((prev) => new Set([...prev].filter((id) => nextIds.has(id))));
+      if (fresh.length > 0) setToasts((current) => [...current, ...fresh]);
+    }
+
+    // Never run two checks at once (a manual refresh during the timer would otherwise race it).
+    async function check() {
+      if (running) {
+        pending = true;
+        return;
+      }
+      running = true;
+      try {
+        do {
+          pending = false;
+          await runOnce();
+        } while (pending && !controller.signal.aborted);
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         // Keep showing the last known alerts if the sheet is unreachable.
+      } finally {
+        running = false;
       }
     }
 

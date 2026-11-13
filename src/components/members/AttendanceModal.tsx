@@ -29,7 +29,7 @@ export default function AttendanceModal({ member, attendance, onClose }: Attenda
     >
       {!attendance || attendance.total === 0 ? (
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          No attendance has been recorded for this member yet. Use Edit member to record the events they attended,
+          No attendance has been recorded for this member yet. Use Edit member to record the events they went to,
           or add them to the Attendance tab of the club sheet.
         </p>
       ) : (
@@ -37,7 +37,7 @@ export default function AttendanceModal({ member, attendance, onClose }: Attenda
           <div>
             <div className="flex items-baseline justify-between">
               <p className="text-sm font-medium text-slate-900 dark:text-white">
-                Attended {attendance.attended} of {attendance.total} events
+                Attended {attendance.attended} of {attendance.total} recorded {attendance.total === 1 ? 'event' : 'events'}
               </p>
               <p className="text-sm font-semibold tabular-nums text-slate-900 dark:text-white">{attendance.rate}%</p>
             </div>

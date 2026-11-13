@@ -5,6 +5,9 @@ export type AttendanceStatus = 'present' | 'late' | 'excused' | 'absent';
 
 export const ATTENDANCE_STATUSES: readonly AttendanceStatus[] = ['present', 'late', 'excused', 'absent'];
 
+/** What a form dropdown holds: a status, or "" for "not recorded". */
+export type AttendanceChoice = AttendanceStatus | '';
+
 export interface AttendanceEntry {
   /** Identifies the event: "sheet:<id>" for sheet events, "app:<uuid>" for events made in the app. */
   eventKey: string;
@@ -27,6 +30,8 @@ export interface MemberAttendance {
 export interface AppMemberRef {
   id: string;
   source_id: string | null;
+  /** active, inactive or alumni */
+  status?: string;
 }
 
 export interface AppEventRef {
@@ -60,6 +65,10 @@ export interface AttendanceSummary {
    * compared with the sheet's Attendance tab. Keyed by the event key.
    */
   attendeeDelta: Map<string, number>;
+  /** Sheet and app records together (the app wins): eventKey -> (memberKey -> status). */
+  records: Map<string, Map<string, AttendanceStatus>>;
+  /** Only what the sheet's Attendance tab says. */
+  sheetRecords: Map<string, Map<string, AttendanceStatus>>;
 }
 
 type Row = Record<string, unknown>;
@@ -103,10 +112,11 @@ function toIsoDay(value: unknown): string {
  * Builds per-student attendance from the sheet (Attendance, Events and Members tabs)
  * and from attendance recorded in the app.
  *
- * - An event counts as "taken" once it has at least one record.
- * - Members from the sheet: a missing record for a taken event counts as absent.
- * - Members added in the app: only the events you recorded for them count.
+ * - Each person's percentage only counts the events that were recorded for that person
+ *   (attended / events recorded for them). Events nobody recorded for them are ignored, so a
+ *   student is never compared against everyone else's events.
  * - If the sheet and the app both have a record for the same student and event, the app wins.
+ * - totalEvents is how many events have at least one record (for the page's summary line).
  */
 export function buildAttendanceSummary(
   attendanceBody: unknown,
@@ -195,16 +205,15 @@ export function buildAttendanceSummary(
 
   const byMember = new Map<string, MemberAttendance>();
   for (const memberKey of memberKeys) {
-    const trackedOnly = memberKey.startsWith('app:'); // app members: only events recorded for them
     const history: AttendanceEntry[] = [];
     for (const eventKey of takenEventKeys) {
       const recorded = records.get(eventKey)?.get(memberKey);
-      if (trackedOnly && recorded === undefined) continue;
+      if (recorded === undefined) continue; // not recorded for this person: ignore the event
       history.push({
         eventKey,
         eventName: events.get(eventKey)?.name ?? 'Event',
         date: events.get(eventKey)?.date ?? '',
-        status: recorded ?? 'absent',
+        status: recorded,
       });
     }
     const attended = history.filter((entry) => isAttended(entry.status)).length;
@@ -217,19 +226,39 @@ export function buildAttendanceSummary(
     });
   }
 
-  return { totalEvents: takenEventKeys.length, byMember, attendeeDelta };
+  return { totalEvents: takenEventKeys.length, byMember, attendeeDelta, records, sheetRecords };
+}
+
+/**
+ * What the edit form should start with for one member: the status from the sheet and the app together,
+ * per database event id, plus which events have a record in the sheet (those cannot be set to "not recorded").
+ */
+export function initialChoicesFor(
+  summary: AttendanceSummary,
+  memberKey: string,
+  events: { id: string; source_id: string | null }[],
+): { choices: Record<string, AttendanceChoice>; sheetBacked: Set<string> } {
+  const choices: Record<string, AttendanceChoice> = {};
+  const sheetBacked = new Set<string>();
+  for (const event of events) {
+    const eventKey = eventKeyOf(event);
+    choices[event.id] = summary.records.get(eventKey)?.get(memberKey) ?? '';
+    if (summary.sheetRecords.get(eventKey)?.has(memberKey)) sheetBacked.add(event.id);
+  }
+  return { choices, sheetBacked };
 }
 
 export async function fetchAttendanceSummary(
   app: AppClubData,
   signal?: AbortSignal,
 ): Promise<AttendanceSummary> {
-  const [attendance, events, members] = await Promise.all(
+  // A tab that is missing is treated as empty; only a sheet that cannot be reached at all is an error.
+  const tabs = await Promise.all(
     ['Attendance', 'Events', 'Members'].map(async (tab) => {
       const response = await fetch(`${SHEET_BASE}/${tab}`, { signal });
-      if (!response.ok) throw new Error(`The ${tab} tab of the club sheet could not be read.`);
-      return (await response.json()) as unknown;
+      return response.ok ? ((await response.json()) as unknown) : null;
     }),
   );
-  return buildAttendanceSummary(attendance, events, members, app);
+  if (tabs.every((tab) => tab === null)) throw new Error('The club sheet could not be read.');
+  return buildAttendanceSummary(tabs[0], tabs[1], tabs[2], app);
 }

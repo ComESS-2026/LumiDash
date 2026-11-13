@@ -28,8 +28,17 @@ export function formatDateTime(value: string): string {
 
 export function toLocalDateTimeInput(iso: string): string {
   const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
   const offset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+/** Today's date in the user's own time zone as YYYY-MM-DD (toISOString would give the UTC date). */
+export function todayLocalISO(): string {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
 }
 
 export function getInitials(name: string): string {

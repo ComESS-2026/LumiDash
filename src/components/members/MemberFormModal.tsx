@@ -8,10 +8,13 @@ import {
   createMember,
   listEvents,
   listMemberAttendance,
+  loadAppClubData,
   saveMemberAttendance,
   updateMember,
 } from '@/lib/clubApi';
-import type { AttendanceChoice } from '@/lib/clubApi';
+import { todayLocalISO } from '@/lib/format';
+import { fetchAttendanceSummary, initialChoicesFor, memberKeyOf } from '@/lib/sheetAttendance';
+import type { AttendanceChoice } from '@/lib/sheetAttendance';
 import { MEMBER_ROLES, MEMBER_STATUSES } from '@/types/club';
 import type { ClubEvent, Member, MemberInput } from '@/types/club';
 
@@ -44,7 +47,7 @@ function getInitialState(member: Member | null): FormState {
     student_id: member?.student_id ?? '',
     role: member?.role ?? 'Member',
     status: member?.status ?? 'active',
-    joined_on: member?.joined_on ?? new Date().toISOString().slice(0, 10),
+    joined_on: member?.joined_on ?? todayLocalISO(),
   };
 }
 
@@ -92,7 +95,20 @@ function describeAttendanceError(err: unknown): string {
   return 'Please try again.';
 }
 
+/** What the attendance list starts with: the sheet's records and the app's records together. */
+async function loadInitialAttendance(member: Member | null, events: ClubEvent[]) {
+  if (!member) return { choices: {} as Record<string, AttendanceChoice>, sheetBacked: new Set<string>() };
+  try {
+    const summary = await fetchAttendanceSummary(await loadAppClubData());
+    return initialChoicesFor(summary, memberKeyOf(member), events);
+  } catch {
+    // The sheet could not be read: fall back to what was recorded in the app.
+    return { choices: await listMemberAttendance(member.id), sheetBacked: new Set<string>() };
+  }
+}
+
 function MemberForm({ member, onClose, onSaved, onChanged }: MemberFormProps) {
+  const fromSheet = Boolean(member?.source_id);
   const [form, setForm] = useState<FormState>(() => getInitialState(member));
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -102,6 +118,7 @@ function MemberForm({ member, onClose, onSaved, onChanged }: MemberFormProps) {
   const memberId = member?.id ?? null;
   const [events, setEvents] = useState<ClubEvent[] | null>(null);
   const [attendance, setAttendance] = useState<Record<string, AttendanceChoice>>({});
+  const [sheetBacked, setSheetBacked] = useState<Set<string>>(new Set());
   const [attendanceLoading, setAttendanceLoading] = useState(true);
   const [attendanceError, setAttendanceError] = useState<string | null>(null);
   const initialAttendance = useRef<Record<string, AttendanceChoice>>({});
@@ -111,14 +128,13 @@ function MemberForm({ member, onClose, onSaved, onChanged }: MemberFormProps) {
     let cancelled = false;
     async function loadAttendance() {
       try {
-        const [eventList, existing] = await Promise.all([
-          listEvents(),
-          memberId ? listMemberAttendance(memberId) : Promise.resolve({} as Record<string, AttendanceChoice>),
-        ]);
+        const eventList = await listEvents();
+        const { choices, sheetBacked: fromSheetRecords } = await loadInitialAttendance(member, eventList);
         if (cancelled) return;
-        initialAttendance.current = existing;
+        initialAttendance.current = choices;
         setEvents(eventList);
-        setAttendance(existing);
+        setAttendance(choices);
+        setSheetBacked(fromSheetRecords);
       } catch (err) {
         if (!cancelled) {
           setAttendanceError(`Attendance could not be loaded. ${describeAttendanceError(err)}`);
@@ -131,14 +147,31 @@ function MemberForm({ member, onClose, onSaved, onChanged }: MemberFormProps) {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the form is remounted for each member (see key)
   }, [memberId]);
 
   const setEventAttendance = (eventId: string, status: AttendanceChoice) => {
     setAttendance((prev) => ({ ...prev, [eventId]: status }));
   };
 
-  const setAllAttendance = (status: AttendanceChoice) => {
-    setAttendance(Object.fromEntries((events ?? []).map((event) => [event.id, status])));
+  // Only fills events that happened and have no record yet; never overwrites what is already recorded.
+  const markUnrecordedPresent = () => {
+    const now = Date.now();
+    setAttendance((prev) => {
+      const next = { ...prev };
+      for (const event of events ?? []) {
+        const start = new Date(event.starts_at).getTime();
+        if (!Number.isNaN(start) && start <= now && !next[event.id]) next[event.id] = 'present';
+      }
+      return next;
+    });
+  };
+
+  // Clears what was recorded in the app. Records that come from the sheet stay.
+  const clearAppRecords = () => {
+    setAttendance((prev) =>
+      Object.fromEntries(Object.entries(prev).map(([eventId, status]) => [eventId, sheetBacked.has(eventId) ? status : ''])),
+    );
   };
 
   const updateField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -198,10 +231,18 @@ function MemberForm({ member, onClose, onSaved, onChanged }: MemberFormProps) {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-5">
+      {fromSheet && (
+        <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:bg-sky-500/15 dark:text-sky-300">
+          This member comes from the club sheet. Name and status are controlled by the sheet, so change them there.
+          Role, student ID and attendance can be edited here.
+        </p>
+      )}
+
       <FormField label="Full name" htmlFor="member-name" error={errors.full_name}>
         <input
           id="member-name"
           className={INPUT_CLASS}
+          disabled={fromSheet}
           value={form.full_name}
           onChange={(e) => updateField('full_name', e.target.value)}
           placeholder="e.g. Maya Chen"
@@ -248,6 +289,7 @@ function MemberForm({ member, onClose, onSaved, onChanged }: MemberFormProps) {
         <FormField label="Status" htmlFor="member-status">
           <select
             id="member-status"
+            disabled={fromSheet}
             className={`${INPUT_CLASS} capitalize`}
             value={form.status}
             onChange={(e) => updateField('status', e.target.value as Member['status'])}
@@ -276,9 +318,11 @@ function MemberForm({ member, onClose, onSaved, onChanged }: MemberFormProps) {
         loading={attendanceLoading}
         error={attendanceError}
         value={attendance}
+        sheetBacked={sheetBacked}
         disabled={saving}
         onChange={setEventAttendance}
-        onSetAll={setAllAttendance}
+        onMarkUnrecordedPresent={markUnrecordedPresent}
+        onClearAppRecords={clearAppRecords}
       />
 
       {submitError && <p className="text-sm text-rose-600 dark:text-rose-400">{submitError}</p>}

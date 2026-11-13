@@ -37,6 +37,7 @@ function EventSourceBadge({ event }: { event: ClubEvent }) {
 
 export default function EventCard({ event, isPast, onEdit, onDelete }: EventCardProps) {
   const start = new Date(event.starts_at);
+  const validStart = !Number.isNaN(start.getTime());
 
   return (
     <article
@@ -46,9 +47,9 @@ export default function EventCard({ event, isPast, onEdit, onDelete }: EventCard
     >
       <div className="flex w-full shrink-0 items-center gap-4 sm:w-20 sm:flex-col sm:gap-0 sm:rounded-xl sm:bg-slate-900 dark:sm:bg-slate-800 sm:py-3 sm:text-center">
         <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 sm:text-emerald-400">
-          {start.toLocaleDateString(undefined, { month: 'short' })}
+          {validStart ? start.toLocaleDateString(undefined, { month: 'short' }) : '—'}
         </span>
-        <span className="text-2xl font-semibold text-slate-900 dark:text-white sm:text-white">{start.getDate()}</span>
+        <span className="text-2xl font-semibold text-slate-900 dark:text-white sm:text-white">{validStart ? start.getDate() : '—'}</span>
       </div>
 
       <div className="min-w-0 flex-1">

@@ -42,12 +42,15 @@ export default function EventsPage() {
 
   const { upcoming, past } = useMemo(() => {
     const now = Date.now();
+    // An event with an unreadable date would match neither tab, so count it as past.
+    const time = (event: ClubEvent) => {
+      const value = new Date(event.starts_at).getTime();
+      return Number.isNaN(value) ? Number.NEGATIVE_INFINITY : value;
+    };
     const all = events ?? [];
     return {
-      upcoming: all.filter((event) => new Date(event.starts_at).getTime() >= now),
-      past: all
-        .filter((event) => new Date(event.starts_at).getTime() < now)
-        .sort((a, b) => b.starts_at.localeCompare(a.starts_at)),
+      upcoming: all.filter((event) => time(event) >= now),
+      past: all.filter((event) => time(event) < now).sort((a, b) => time(b) - time(a)),
     };
   }, [events]);
 
@@ -65,7 +68,10 @@ export default function EventsPage() {
         : 'Already up to date with the club sheet.',
     ];
     if (skipped > 0) {
-      parts.push(`${skipped} ${skipped === 1 ? 'row was' : 'rows were'} skipped because details were missing.`);
+      parts.push(`${skipped} ${skipped === 1 ? 'row was' : 'rows were'} skipped (missing or repeated id, name or date).`);
+    }
+    if (result.failed > 0) {
+      parts.push(`${result.failed} could not be saved (for example an email that is already used).`);
     }
     return parts.join(' ');
   };
@@ -202,7 +208,11 @@ export default function EventsPage() {
       <ConfirmDialog
         open={deletingEvent !== null}
         title="Delete event"
-        message={`Delete "${deletingEvent?.title ?? 'this event'}"? This cannot be undone.`}
+        message={`Delete "${deletingEvent?.title ?? 'this event'}"? This cannot be undone.${
+          deletingEvent?.source_id
+            ? ' This event comes from the club sheet, so it will be added back at the next sync unless you also delete its row in the sheet.'
+            : ''
+        }`}
         busy={deleteBusy}
         error={deleteError}
         onConfirm={handleConfirmDelete}

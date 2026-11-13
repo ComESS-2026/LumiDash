@@ -23,6 +23,12 @@ function describeAuthError(message: string): string {
   const lower = message.toLowerCase();
   if (lower.includes('invalid login credentials')) return 'The email or password is incorrect.';
   if (lower.includes('already registered')) return 'An account with this email already exists.';
+  if (lower.includes('rate limit') || lower.includes('too many') || lower.includes('security purposes')) {
+    return 'Too many attempts. Please wait a minute and try again, or use Sign in if you already have an account.';
+  }
+  if (lower.includes('email not confirmed')) {
+    return 'This email has not been confirmed yet. Check your inbox, or ask the admin to turn off email confirmation.';
+  }
   if (lower.includes('password')) return message;
   if (lower.includes('fetch') || lower.includes('network')) {
     return 'We could not reach the server. Check your connection and try again.';
@@ -37,11 +43,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let active = true;
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (!active) return;
-      setSession(data.session);
-      setLoading(false);
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!active) return;
+        setSession(data.session);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (active) setLoading(false); // show the login page instead of spinning forever
+      });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (!active) return;

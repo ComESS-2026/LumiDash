@@ -45,7 +45,7 @@ function pick(row: Row, ...keys: string[]): string | undefined {
   return undefined;
 }
 
-function normalizeStatus(value: string | undefined): MemberStatus {
+export function normalizeStatus(value: string | undefined): MemberStatus {
   const text = (value ?? '').toLowerCase();
   if (text.includes('alumni') || text.includes('ศิษย์เก่า')) return 'alumni';
   if (text.includes('inactive') || text.includes('ไม่')) return 'inactive';
@@ -72,12 +72,21 @@ export function parseSheetMembers(body: unknown): SheetMembersResult {
 
   const members: SheetMemberImport[] = [];
   const presentSourceIds: string[] = [];
+  const seen = new Set<string>();
   let skipped = 0;
 
   for (const raw of body as Row[]) {
     const id = pick(raw, 'id', 'member_id') ?? '';
     const fullName = pick(raw, 'name', 'full_name', 'member_name') ?? '';
-    if (id) presentSourceIds.push(`sheet:${id}`);
+    // A repeated id would make the two rows fight over one member on every sync: keep the first.
+    if (id && seen.has(id)) {
+      skipped += 1;
+      continue;
+    }
+    if (id) {
+      seen.add(id);
+      presentSourceIds.push(`sheet:${id}`);
+    }
     if (!id || !fullName) {
       skipped += 1;
       continue;

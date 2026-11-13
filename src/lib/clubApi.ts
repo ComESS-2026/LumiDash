@@ -1,3 +1,4 @@
+import { todayLocalISO } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import type { ClubEvent, EventInput, Member, MemberInput } from '@/types/club';
 import { planSheetSync } from '@/lib/sheetEvents';
@@ -9,8 +10,11 @@ import type {
   AppClubData,
   AppEventRef,
   AppMemberRef,
+  AttendanceChoice,
   AttendanceStatus,
 } from '@/lib/sheetAttendance';
+
+export type { AttendanceChoice };
 
 function assertNoError(error: { message: string } | null) {
   if (error) throw new Error(error.message);
@@ -45,6 +49,7 @@ export async function deleteMember(id: string): Promise<void> {
  * Makes the members copied from the Google Sheet match the sheet:
  * new rows are added, changed rows are updated, deleted rows are removed.
  * Members created in the app (no source_id) are never touched.
+ * One bad row (for example an email another member already uses) never blocks the others.
  */
 export async function syncSheetMembers(userId: string, sheet: SheetMembersResult): Promise<SheetSyncResult> {
   const { data, error } = await supabase
@@ -54,7 +59,8 @@ export async function syncSheetMembers(userId: string, sheet: SheetMembersResult
   assertNoError(error);
 
   const plan = planMemberSync((data ?? []) as ExistingSheetMember[], sheet);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalISO();
+  let failed = 0;
 
   if (plan.toInsert.length > 0) {
     const rows = plan.toInsert.map((member) => ({
@@ -68,15 +74,33 @@ export async function syncSheetMembers(userId: string, sheet: SheetMembersResult
       role: member.role ?? 'Member',
       joined_on: member.joined_on ?? today,
     }));
-    const { error: insertError } = await supabase
-      .from('members')
-      .upsert(rows, { onConflict: 'user_id,source_id', ignoreDuplicates: true });
-    assertNoError(insertError);
+    const options = { onConflict: 'user_id,source_id', ignoreDuplicates: true };
+    const { error: insertError } = await supabase.from('members').upsert(rows, options);
+    if (insertError) {
+      // Retry one by one; a row whose email is already taken gets a placeholder email instead.
+      for (const row of rows) {
+        const first = await supabase.from('members').upsert(row, options);
+        if (!first.error) continue;
+        const retry = await supabase
+          .from('members')
+          .upsert({ ...row, email: placeholderEmail(row.source_id) }, options);
+        if (retry.error) failed += 1;
+      }
+    }
   }
 
   for (const change of plan.toUpdate) {
     const { error: updateError } = await supabase.from('members').update(change.changes).eq('id', change.id);
-    assertNoError(updateError);
+    if (!updateError) continue;
+    // Most likely the new email belongs to someone else: apply everything except the email.
+    const rest = { ...change.changes };
+    delete rest.email;
+    if (Object.keys(rest).length === 0) {
+      failed += 1;
+      continue;
+    }
+    const retry = await supabase.from('members').update(rest).eq('id', change.id);
+    if (retry.error) failed += 1;
   }
 
   if (plan.toDeleteIds.length > 0) {
@@ -84,7 +108,12 @@ export async function syncSheetMembers(userId: string, sheet: SheetMembersResult
     assertNoError(deleteError);
   }
 
-  return { added: plan.toInsert.length, updated: plan.toUpdate.length, removed: plan.toDeleteIds.length };
+  return {
+    added: plan.toInsert.length,
+    updated: plan.toUpdate.length,
+    removed: plan.toDeleteIds.length,
+    failed,
+  };
 }
 
 export async function listEvents(): Promise<ClubEvent[]> {
@@ -105,6 +134,8 @@ export interface SheetSyncResult {
   added: number;
   updated: number;
   removed: number;
+  /** Rows that could not be saved (for example a duplicate email). */
+  failed: number;
 }
 
 /**
@@ -142,7 +173,7 @@ export async function syncSheetEvents(userId: string, sheet: SheetEventsResult):
     assertNoError(deleteError);
   }
 
-  return { added: plan.toInsert.length, updated: plan.toUpdate.length, removed: plan.toDeleteIds.length };
+  return { added: plan.toInsert.length, updated: plan.toUpdate.length, removed: plan.toDeleteIds.length, failed: 0 };
 }
 
 export async function updateEvent(id: string, input: EventInput): Promise<void> {
@@ -156,9 +187,6 @@ export async function deleteEvent(id: string): Promise<void> {
 }
 
 // ---- attendance recorded in the app ---------------------------------------
-
-/** "" means "not recorded". */
-export type AttendanceChoice = AttendanceStatus | '';
 
 const PAGE_SIZE = 1000;
 
@@ -182,14 +210,14 @@ async function selectAll<T>(table: string, columns: string): Promise<T[]> {
 /** Everything the attendance numbers need from the database. */
 export async function loadAppClubData(): Promise<AppClubData> {
   const [members, events, attendance] = await Promise.all([
-    selectAll<AppMemberRef>('members', 'id, source_id'),
+    selectAll<AppMemberRef>('members', 'id, source_id, status'),
     selectAll<AppEventRef>('events', 'id, title, starts_at, source_id'),
     selectAll<AppAttendanceRow>('attendance', 'id, member_id, event_id, status').catch(() => [] as AppAttendanceRow[]),
   ]);
   return { members, events, attendance };
 }
 
-/** The attendance already recorded in the app for one member, keyed by event id. */
+/** The attendance already recorded in the app for one member, keyed by event id (the app's own records only). */
 export async function listMemberAttendance(memberId: string): Promise<Record<string, AttendanceChoice>> {
   const { data, error } = await supabase
     .from('attendance')

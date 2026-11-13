@@ -6,13 +6,20 @@ import {
   Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import Badge from '@/components/ui/Badge';
+import Button from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
 import PageHeader from '@/components/ui/PageHeader';
 import type { PageId } from '@/components/layout/Sidebar';
+import { parseEventDate } from '@/lib/alerts';
 import { loadAppClubData } from '@/lib/clubApi';
 import { SHEET_BASE } from '@/lib/sheet';
 import { EMPTY_APP_DATA, buildAttendanceSummary } from '@/lib/sheetAttendance';
-import type { AppEventRef } from '@/lib/sheetAttendance';
-import { supabase } from '@/lib/supabase';
+import type { AppEventRef, AppMemberRef } from '@/lib/sheetAttendance';
+import { normalizeStatus } from '@/lib/sheetMembers';
+import { STATUS_TONES } from '@/lib/tones';
+import { MEMBER_STATUSES } from '@/types/club';
+import type { MemberStatus } from '@/types/club';
 
 interface SheetMember {
   id: string;
@@ -46,7 +53,8 @@ interface DashboardData {
   events: SheetEvent[];
   budget: SheetBudget[];
   attendance: SheetAttendance[];
-  appMemberCount: number;
+  /** Members added in the web app (not in the sheet). */
+  appMembers: AppMemberRef[];
   appEvents: AppEventRef[];
   attendeeDelta: Map<string, number>;
 }
@@ -72,6 +80,15 @@ function parseCount(value: string): number {
   return Number.isFinite(count) ? count : 0;
 }
 
+/** A sortable YYYY-MM-DD for a date written in the sheet (any common format); the raw text if it can't be read. */
+function sortableDate(value: string): string {
+  const date = parseEventDate(value);
+  if (!date) return String(value ?? '');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
 function formatMoney(amount: number): string {
   return `$${Math.round(amount).toLocaleString('en-US')}`;
 }
@@ -82,13 +99,15 @@ interface StatCardProps {
   hint: string;
   icon: LucideIcon;
   className?: string;
+  /** Makes the whole card a button, for cards that open a breakdown. */
+  onClick?: () => void;
+  actionLabel?: string;
 }
 
-function StatCard({ label, value, hint, icon: Icon, className = '' }: StatCardProps) {
-  return (
-    <div
-      className={`group min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20 ${className}`}
-    >
+function StatCard({ label, value, hint, icon: Icon, className = '', onClick, actionLabel }: StatCardProps) {
+  const classes = `group min-w-0 rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20 ${className}`;
+  const content = (
+    <>
       <div className="flex items-center justify-between gap-3">
         <p className="min-w-0 text-sm font-medium text-slate-500 dark:text-slate-400">{label}</p>
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 transition group-hover:bg-emerald-600 group-hover:text-white dark:bg-emerald-500/15 dark:text-emerald-300 dark:group-hover:bg-emerald-500 dark:group-hover:text-white">
@@ -99,7 +118,89 @@ function StatCard({ label, value, hint, icon: Icon, className = '' }: StatCardPr
         {value}
       </p>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{hint}</p>
-    </div>
+      {actionLabel && (
+        <p className="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-400">{actionLabel} →</p>
+      )}
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-haspopup="dialog"
+        className={`${classes} w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600`}
+      >
+        {content}
+      </button>
+    );
+  }
+  return <div className={classes}>{content}</div>;
+}
+
+const STATUS_BAR_CLASSES: Record<MemberStatus, string> = {
+  active: 'bg-emerald-500',
+  inactive: 'bg-amber-500',
+  alumni: 'bg-slate-400 dark:bg-slate-500',
+};
+
+interface MemberBreakdownModalProps {
+  open: boolean;
+  total: number;
+  counts: Record<MemberStatus, number>;
+  onClose: () => void;
+  onViewMembers: () => void;
+}
+
+function MemberBreakdownModal({ open, total, counts, onClose, onViewMembers }: MemberBreakdownModalProps) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Members by status"
+      description="Members from the club sheet plus members added in the web app."
+    >
+      <div className="space-y-5">
+        <div className="flex items-baseline justify-between">
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total members</p>
+          <p className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-white">
+            {total.toLocaleString('en-US')}
+          </p>
+        </div>
+
+        <ul className="space-y-4">
+          {MEMBER_STATUSES.map((status) => {
+            const count = counts[status];
+            const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+            return (
+              <li key={status}>
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <Badge tone={STATUS_TONES[status]}>{status}</Badge>
+                  <p className="text-sm tabular-nums text-slate-700 dark:text-slate-200">
+                    <span className="font-semibold text-slate-900 dark:text-white">{count.toLocaleString('en-US')}</span>
+                    <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">{percent}%</span>
+                  </p>
+                </div>
+                <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                  <div
+                    className={`h-full rounded-full ${STATUS_BAR_CLASSES[status]}`}
+                    style={{ width: `${percent}%` }}
+                  />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="flex justify-end gap-3 border-t border-slate-200 pt-5 dark:border-slate-800">
+          <Button variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+          <Button onClick={onViewMembers}>View members</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -219,6 +320,7 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const hasLoaded = useRef(false);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => setReloadKey((key) => key + 1), 30_000);
@@ -236,13 +338,22 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
           endpoints.map((sheet) => fetch(`${SHEET_BASE}/${sheet}`, { signal: controller.signal })),
         );
 
-        if (responses.some((response) => !response.ok)) {
+        // The Attendance tab is optional: without it the dashboard still works.
+        if (responses.slice(0, 3).some((response) => !response.ok)) {
           throw new Error('OpenSheet API ส่งสถานะไม่สำเร็จ');
         }
 
-        const [members, events, budget, attendance] = (await Promise.all(
-          responses.map((response) => response.json()),
-        )) as [SheetMember[], SheetEvent[], SheetBudget[], SheetAttendance[]];
+        const asRows = async <T,>(response: Response): Promise<T[]> => {
+          if (!response.ok) return [];
+          const body: unknown = await response.json();
+          return Array.isArray(body) ? (body as T[]) : [];
+        };
+        const [members, events, budget, attendance] = await Promise.all([
+          asRows<SheetMember>(responses[0]),
+          asRows<SheetEvent>(responses[1]),
+          asRows<SheetBudget>(responses[2]),
+          asRows<SheetAttendance>(responses[3]),
+        ]);
 
         let app = EMPTY_APP_DATA;
         try {
@@ -252,17 +363,12 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
         }
         const { attendeeDelta } = buildAttendanceSummary(attendance, events, members, app);
 
-        const [memberCount, eventCount] = await Promise.all([
-          supabase.from('members').select('id', { count: 'exact', head: true }).is('source_id', null),
-          supabase.from('events').select('id', { count: 'exact', head: true }).is('source_id', null),
-        ]);
-
         setData({
           members,
           events,
           budget,
           attendance,
-          appMemberCount: memberCount.count ?? app.members.filter((m) => !m.source_id).length,
+          appMembers: app.members.filter((member) => !member.source_id),
           appEvents: app.events.filter((event) => !event.source_id),
           attendeeDelta,
         });
@@ -296,19 +402,27 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
       ...data.events.map((event) => ({
         id: `sheet:${event.id}`,
         name: event.event_name,
-        date: event.date,
+        date: sortableDate(event.date),
         attendees: Math.max(0, parseCount(event.attendees_count) + (data.attendeeDelta.get(`sheet:${event.id}`) ?? 0)),
       })),
       ...data.appEvents.map((event) => ({
         id: `app:${event.id}`,
         name: event.title,
-        date: new Date(event.starts_at).toLocaleDateString('sv-SE'),
+        date: Number.isNaN(new Date(event.starts_at).getTime())
+          ? ''
+          : new Date(event.starts_at).toLocaleDateString('sv-SE'),
         attendees: Math.max(0, data.attendeeDelta.get(`app:${event.id}`) ?? 0),
       })),
     ];
 
+    // Members by status: the sheet's members plus the ones added in the web app.
+    const statusCounts: Record<MemberStatus, number> = { active: 0, inactive: 0, alumni: 0 };
+    for (const member of data.members) statusCounts[normalizeStatus(member.status)] += 1;
+    for (const member of data.appMembers) statusCounts[normalizeStatus(member.status)] += 1;
+
     return {
-      memberCount: data.members.length + data.appMemberCount,
+      statusCounts,
+      memberCount: statusCounts.active + statusCounts.inactive + statusCounts.alumni,
       eventCount: data.events.length + data.appEvents.length,
       attendanceRows,
       plannedTotal,
@@ -362,10 +476,12 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <StatCard
-              label="Total Active Members"
+              label="Total Members"
               value={summary.memberCount.toLocaleString('en-US')}
-              hint="จำนวนสมาชิกทั้งหมดจากแท็บ Members รวมสมาชิกที่เพิ่มในเว็บ"
+              hint={`Active ${summary.statusCounts.active} · Inactive ${summary.statusCounts.inactive} · Alumni ${summary.statusCounts.alumni}`}
               icon={Users}
+              onClick={() => setBreakdownOpen(true)}
+              actionLabel="คลิกเพื่อดูแยกตามสถานะ"
             />
             <StatCard
               label="Total Events Conducted"
@@ -420,6 +536,17 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
               )}
             </section>
           </div>
+
+          <MemberBreakdownModal
+            open={breakdownOpen}
+            total={summary.memberCount}
+            counts={summary.statusCounts}
+            onClose={() => setBreakdownOpen(false)}
+            onViewMembers={() => {
+              setBreakdownOpen(false);
+              onNavigate('members');
+            }}
+          />
         </>
       )}
     </div>

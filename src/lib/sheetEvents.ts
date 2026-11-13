@@ -28,12 +28,21 @@ export function parseSheetEvents(body: unknown): SheetEventsResult {
 
   const events: SheetEventImport[] = [];
   const presentSourceIds: string[] = [];
+  const seen = new Set<string>();
   let skipped = 0;
 
   for (const row of body as SheetEventRow[]) {
     const id = String(row.id ?? '').trim();
     const title = String(row.event_name ?? '').trim();
-    if (id) presentSourceIds.push(`sheet:${id}`);
+    // A repeated id would make the two rows fight over one event on every sync: keep the first.
+    if (id && seen.has(id)) {
+      skipped += 1;
+      continue;
+    }
+    if (id) {
+      seen.add(id);
+      presentSourceIds.push(`sheet:${id}`);
+    }
 
     const day = parseEventDate(row.date);
     if (!id || !title || !day) {
