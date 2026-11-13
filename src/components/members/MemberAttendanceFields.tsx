@@ -75,7 +75,7 @@ export default function MemberAttendanceFields({
                   <p className="truncate text-sm font-medium text-slate-900">{event.title}</p>
                   <p className="text-xs text-slate-500">
                     {formatDate(event.starts_at)}
-                    {new Date(event.starts_at).getTime() > now ? ' · upcoming' : ''}
+                    {event.starts_at && new Date(event.starts_at).getTime() > now ? ' · upcoming' : ''}
                   </p>
                 </div>
                 <select

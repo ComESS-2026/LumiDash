@@ -184,7 +184,7 @@ export async function loadAppClubData(): Promise<AppClubData> {
   const [members, events, attendance] = await Promise.all([
     selectAll<AppMemberRef>('members', 'id, source_id'),
     selectAll<AppEventRef>('events', 'id, title, starts_at, source_id'),
-    selectAll<AppAttendanceRow>('attendance', 'id, member_id, event_id, status'),
+    selectAll<AppAttendanceRow>('attendance', 'id, member_id, event_id, status').catch(() => [] as AppAttendanceRow[]),
   ]);
   return { members, events, attendance };
 }
