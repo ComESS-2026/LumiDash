@@ -93,15 +93,15 @@ export default function MemberAttendanceFields({
 
       {!loading && !error && sorted.length > 0 && (
         <>
-          <ul className="max-h-56 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+          <ul className="max-h-72 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
             {sorted.map((event) => {
               const fromSheet = sheetBacked.has(event.id);
               const upcoming = startTime(event) > now;
               return (
-                <li key={event.id} className="flex items-center justify-between gap-3 px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="flex items-center gap-1.5 text-sm font-medium text-slate-900 dark:text-white">
-                      <span className="truncate" title={event.title}>
+                <li key={event.id} className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                  <div className="min-w-0 sm:flex-1">
+                    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm font-medium text-slate-900 dark:text-white">
+                      <span className="break-words" title={event.title}>
                         {event.title || 'Untitled event'}
                       </span>
                       {fromSheet && (
@@ -121,7 +121,7 @@ export default function MemberAttendanceFields({
                   </div>
                   <select
                     aria-label={`Attendance for ${event.title}`}
-                    className={`${INPUT_CLASS} w-36 shrink-0 capitalize`}
+                    className={`${INPUT_CLASS} capitalize sm:w-40 sm:shrink-0`}
                     value={value[event.id] ?? ''}
                     onChange={(e) => onChange(event.id, e.target.value as AttendanceChoice)}
                   >
