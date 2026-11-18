@@ -89,7 +89,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       },
       signOut: async () => {
-        await supabase.auth.signOut();
+        try {
+          await supabase.auth.signOut();
+        } catch (err) {
+          console.warn('Sign-out network or session warning:', err);
+        } finally {
+          // Forces local state and session cleanup even if the server returns 403 or network fails
+          setSession(null);
+          localStorage.clear();
+        }
       },
     }),
     [session, loading],
