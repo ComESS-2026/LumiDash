@@ -136,7 +136,7 @@ LumiDash-main/
 
 ## Live Demo
 
-URL: <[paste deployed link here](https://lumi-dash-livid.vercel.app/)>
+URL: <[LumiDash](https://lumi-dash-livid.vercel.app/)>
 
 ## License
 
