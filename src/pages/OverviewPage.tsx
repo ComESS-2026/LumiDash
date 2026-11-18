@@ -93,6 +93,38 @@ function formatMoney(amount: number): string {
   return `฿${Math.round(amount).toLocaleString('en-US')}`;
 }
 
+function startOfDay(date: Date): Date {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+interface EventTypeCounts {
+  completed: number;
+  upcoming: number;
+}
+
+/** Splits events into completed (date already passed) and upcoming (today or later). */
+function computeEventTypeCounts(data: DashboardData): EventTypeCounts {
+  const today = startOfDay(new Date());
+  const classify = (date: Date | null): 'completed' | 'upcoming' => {
+    if (!date) return 'upcoming';
+    return startOfDay(date) < today ? 'completed' : 'upcoming';
+  };
+
+  let completed = 0;
+  let upcoming = 0;
+  for (const event of data.events) {
+    if (classify(parseEventDate(event.date)) === 'completed') completed += 1;
+    else upcoming += 1;
+  }
+  for (const event of data.appEvents) {
+    if (classify(new Date(event.starts_at)) === 'completed') completed += 1;
+    else upcoming += 1;
+  }
+  return { completed, upcoming };
+}
+
 interface StatCardProps {
   label: string;
   value: string;
@@ -107,21 +139,23 @@ interface StatCardProps {
 function StatCard({ label, value, hint, icon: Icon, className = '', onClick, actionLabel }: StatCardProps) {
   const classes = `group min-w-0 rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20 ${className}`;
   const content = (
-    <>
-      <div className="flex items-center justify-between gap-3">
-        <p className="min-w-0 text-sm font-medium text-slate-500 dark:text-slate-400">{label}</p>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 transition group-hover:bg-emerald-600 group-hover:text-white dark:bg-emerald-500/15 dark:text-emerald-300 dark:group-hover:bg-emerald-500 dark:group-hover:text-white">
-          <Icon className="h-4 w-4" />
+    <div className="flex h-full flex-col justify-between">
+      <div>
+        <div className="flex items-center justify-between gap-3">
+          <p className="min-w-0 text-sm font-medium text-slate-500 dark:text-slate-400">{label}</p>
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 transition group-hover:bg-emerald-600 group-hover:text-white dark:bg-emerald-500/15 dark:text-emerald-300 dark:group-hover:bg-emerald-500 dark:group-hover:text-white">
+            <Icon className="h-4 w-4" />
+          </div>
         </div>
+        <p className="mt-3 break-words text-2xl font-semibold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
+          {value}
+        </p>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{hint}</p>
       </div>
-      <p className="mt-3 break-words text-2xl font-semibold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
-        {value}
-      </p>
-      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{hint}</p>
       {actionLabel && (
         <p className="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-400">{actionLabel} →</p>
       )}
-    </>
+    </div>
   );
 
   if (onClick) {
@@ -198,6 +232,129 @@ function MemberBreakdownModal({ open, total, counts, onClose, onViewMembers }: M
             Close
           </Button>
           <Button onClick={onViewMembers}>View members</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+interface EventBreakdownModalProps {
+  open: boolean;
+  total: number;
+  counts: EventTypeCounts;
+  onClose: () => void;
+  onViewEvents: () => void;
+}
+
+function EventBreakdownModal({ open, total, counts, onClose, onViewEvents }: EventBreakdownModalProps) {
+  const { completed, upcoming } = counts;
+  const rows = [
+    { label: 'Completed', count: completed, tone: 'emerald' as const, barClass: 'bg-emerald-500' },
+    { label: 'Upcoming', count: upcoming, tone: 'sky' as const, barClass: 'bg-sky-500' },
+  ];
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Events by type"
+      description="Grouped by event date: past events are completed, future events are upcoming."
+    >
+      <div className="space-y-5">
+        <div className="flex items-baseline justify-between">
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total events</p>
+          <p className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-white">
+            {total.toLocaleString('en-US')}
+          </p>
+        </div>
+
+        <ul className="space-y-4">
+          {rows.map((row) => {
+            const percent = total > 0 ? Math.round((row.count / total) * 100) : 0;
+            return (
+              <li key={row.label}>
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <Badge tone={row.tone}>{row.label}</Badge>
+                  <p className="text-sm tabular-nums text-slate-700 dark:text-slate-200">
+                    <span className="font-semibold text-slate-900 dark:text-white">{row.count.toLocaleString('en-US')}</span>
+                    <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">{percent}%</span>
+                  </p>
+                </div>
+                <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                  <div className={`h-full rounded-full ${row.barClass}`} style={{ width: `${percent}%` }} />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="flex justify-end gap-3 border-t border-slate-200 pt-5 dark:border-slate-800">
+          <Button variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+          <Button onClick={onViewEvents}>View events</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+interface BudgetBreakdownModalProps {
+  open: boolean;
+  rows: BudgetRow[];
+  plannedTotal: number;
+  usedTotal: number;
+  onClose: () => void;
+  onViewEvents: () => void;
+}
+
+function BudgetBreakdownModal({ open, rows, plannedTotal, usedTotal, onClose, onViewEvents }: BudgetBreakdownModalProps) {
+  const difference = usedTotal - plannedTotal;
+  const percent = plannedTotal > 0 ? Math.round((usedTotal / plannedTotal) * 100) : 0;
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Budget by event"
+      description="Planned vs actual spending from the Budget sheet."
+    >
+      <div className="space-y-5">
+        <div className="flex items-baseline justify-between">
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total used vs budget</p>
+          <p className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-white">
+            {formatMoney(usedTotal)} / {formatMoney(plannedTotal)}
+          </p>
+        </div>
+
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          {percent}% of the overall budget used ({difference >= 0 ? 'over' : 'under'} by {formatMoney(Math.abs(difference))})
+        </p>
+
+        <ul className="space-y-4">
+          {rows.map((row) => {
+            const diff = row.used - row.planned;
+            return (
+              <li key={row.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border border-slate-200 dark:border-slate-800 rounded-xl p-3 bg-white dark:bg-slate-800/50">
+                <div>
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">{row.category}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {formatMoney(row.planned)} planned · {formatMoney(row.used)} spent
+                  </p>
+                </div>
+                <p className={`shrink-0 text-sm font-semibold tabular-nums ${diff > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                  {diff >= 0 ? '+' : ''}{formatMoney(diff)}
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="flex justify-end gap-3 border-t border-slate-200 pt-5 dark:border-slate-800">
+          <Button variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+          <Button onClick={onViewEvents}>View events</Button>
         </div>
       </div>
     </Modal>
@@ -321,6 +478,8 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
   const [reloadKey, setReloadKey] = useState(0);
   const hasLoaded = useRef(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const [eventsBreakdownOpen, setEventsBreakdownOpen] = useState(false);
+  const [budgetBreakdownOpen, setBudgetBreakdownOpen] = useState(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => setReloadKey((key) => key + 1), 30_000);
@@ -424,6 +583,7 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
       statusCounts,
       memberCount: statusCounts.active + statusCounts.inactive + statusCounts.alumni,
       eventCount: data.events.length + data.appEvents.length,
+      eventTypeCounts: computeEventTypeCounts(data),
       attendanceRows,
       plannedTotal,
       usedTotal,
@@ -488,6 +648,8 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
               value={summary.eventCount.toLocaleString('en-US')}
               hint="จำนวนกิจกรรมทั้งหมดจากแท็บ Events รวมกิจกรรมที่เพิ่มในเว็บ"
               icon={CalendarDays}
+              onClick={() => setEventsBreakdownOpen(true)}
+              actionLabel="Click to view breakdown by type"
             />
             <StatCard
               label="Total Budget Used"
@@ -495,6 +657,8 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
               hint={`จากงบวางแผนทั้งหมด ${formatMoney(summary.plannedTotal)}`}
               icon={PieChart}
               className="sm:col-span-2 lg:col-span-1"
+              onClick={() => setBudgetBreakdownOpen(true)}
+              actionLabel="Click to view breakdown by event"
             />
           </div>
 
@@ -545,6 +709,27 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
             onViewMembers={() => {
               setBreakdownOpen(false);
               onNavigate('members');
+            }}
+          />
+          <EventBreakdownModal
+            open={eventsBreakdownOpen}
+            total={summary.eventCount}
+            counts={summary.eventTypeCounts}
+            onClose={() => setEventsBreakdownOpen(false)}
+            onViewEvents={() => {
+              setEventsBreakdownOpen(false);
+              onNavigate('events');
+            }}
+          />
+          <BudgetBreakdownModal
+            open={budgetBreakdownOpen}
+            rows={summary.budgetRows}
+            plannedTotal={summary.plannedTotal}
+            usedTotal={summary.usedTotal}
+            onClose={() => setBudgetBreakdownOpen(false)}
+            onViewEvents={() => {
+              setBudgetBreakdownOpen(false);
+              onNavigate('events');
             }}
           />
         </>
