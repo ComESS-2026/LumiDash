@@ -8,6 +8,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
+import Logo from '@/components/ui/Logo';
 import Modal from '@/components/ui/Modal';
 import PageHeader from '@/components/ui/PageHeader';
 import type { PageId } from '@/components/layout/Sidebar';
@@ -595,7 +596,7 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
   return (
     <div className="space-y-6 animate-fade-in sm:space-y-8">
       <PageHeader
-        title="LumiDash"
+        title={<Logo className="shrink-0" />}
         description="ภาพรวมสมาชิก กิจกรรม และงบประมาณของชมรม จาก OpenSheet"
         action={
           <button
