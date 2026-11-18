@@ -3,6 +3,7 @@ import type { ComponentType } from 'react';
 import { Loader2, Menu, Moon, Sun } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import Sidebar, { NAV_ITEMS } from '@/components/layout/Sidebar';
+import Logo from '@/components/ui/Logo';
 import type { PageId } from '@/components/layout/Sidebar';
 import OverviewPage from '@/pages/OverviewPage';
 import MembersPage from '@/pages/MembersPage';
@@ -79,7 +80,7 @@ function Dashboard({ userEmail, onSignOut }: DashboardProps) {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <span className="ml-3 text-sm font-semibold text-slate-900 dark:text-white lg:hidden">LumiDash</span>
+          <Logo className="ml-3 lg:hidden" />
           <span className="hidden text-sm font-semibold text-slate-900 dark:text-white lg:inline">
             {NAV_ITEMS.find((item) => item.id === activePage)?.label}
           </span>

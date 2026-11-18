@@ -1,3 +1,17 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --logo-ink: theme('colors.slate.900');
+  --logo-accent: theme('colors.emerald.500');
+}
+.dark {
+  --logo-ink: theme('colors.slate.50');
+  --logo-accent: theme('colors.emerald.400');
+}
+/* For surfaces that are always dark (the Sidebar), regardless of theme */
+.logo-on-dark {
+  --logo-ink: theme('colors.slate.50');
+  --logo-accent: theme('colors.emerald.400');
+}

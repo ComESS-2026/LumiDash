@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { GraduationCap, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import Button from '@/components/ui/Button';
+import Logo from '@/components/ui/Logo';
 import FormField, { INPUT_CLASS } from '@/components/ui/FormField';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -81,10 +82,7 @@ export default function AuthPage() {
     <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 px-4 py-12 font-sans text-slate-900 dark:text-white">
       <div className="w-full max-w-sm animate-scale-in">
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm">
-            <GraduationCap className="h-6 w-6" />
-          </div>
-          <p className="mt-4 text-lg font-semibold tracking-tight text-slate-900 dark:text-white">LumiDash</p>
+          <Logo />
         </div>
 
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm sm:p-8">

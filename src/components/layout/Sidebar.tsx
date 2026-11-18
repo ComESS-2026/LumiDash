@@ -1,4 +1,5 @@
-import { CalendarDays, GraduationCap, LayoutDashboard, LogOut, Users, X } from 'lucide-react';
+import { CalendarDays, LayoutDashboard, LogOut, Users, X } from 'lucide-react';
+import Logo from '@/components/ui/Logo';
 import type { LucideIcon } from 'lucide-react';
 import NotificationBell from '@/components/notifications/NotificationBell';
 
@@ -49,10 +50,7 @@ export default function Sidebar({
       >
         <div className="flex h-16 items-center justify-between px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500 text-white">
-              <GraduationCap className="h-5 w-5" />
-            </div>
-            <span className="text-base font-semibold tracking-tight text-white">LumiDash</span>
+            <Logo onDark />
           </div>
           <div className = "flex items-center gap-1">
             <div className = "hidden lg:block">
