@@ -26,7 +26,12 @@ export async function listMembers(): Promise<Member[]> {
     .select('*')
     .order('full_name', { ascending: true });
   assertNoError(error);
-  return (data ?? []) as Member[];
+  // Normalize student_id so it is always snake_case regardless of whether the
+  // API returns camelCase `studentId` or snake_case `student_id`.
+  return (data ?? []).map((m: any) => ({
+    ...m,
+    student_id: m.student_id ?? m.studentId ?? null,
+  })) as Member[];
 }
 
 export async function createMember(input: MemberInput): Promise<Member> {

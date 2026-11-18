@@ -81,7 +81,9 @@ export default function MembersTable({ members, attendance, onEdit, onDelete, on
                   </div>
                 </td>
                 <td className="hidden px-6 py-4 text-slate-600 dark:text-slate-300 md:table-cell">
-                  {member.student_id ?? <span className="text-slate-400 dark:text-slate-500">Not provided</span>}
+                  {(member.student_id ?? (member as { studentId?: string | null }).studentId ?? '') || (
+                    <span className="text-slate-400 dark:text-slate-500">Not provided</span>
+                  )}
                 </td>
                 <td className="px-6 py-4">
                   <Badge tone={ROLE_TONES[member.role]}>{member.role}</Badge>
