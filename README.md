@@ -59,6 +59,8 @@ npm install
 
 Create a `.env` file in the root directory of the project and add your Supabase credentials:
 
+You can start by copying the example file (`cp .env.example .env`), then fill in your real values:
+
 ```env
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
@@ -117,5 +119,25 @@ LumiDash-main/
 │   └── main.tsx            # Application entry point
 ├── supabase/
 │   └── migrations/         # SQL schema and migration files
+├── .env.example            # Example environment variables (copy to `.env`)
 ├── .gitignore              # Specifies intentionally untracked files (including .env)
+├── LICENSE                 # MIT License
 ├── package.json            # Project dependencies and npm scripts
+├── package-lock.json       # Locked dependency versions
+├── vite.config.ts          # Vite configuration
+├── tailwind.config.js      # Tailwind CSS configuration
+├── postcss.config.js       # PostCSS configuration
+├── tsconfig.json           # TypeScript configuration
+├── tsconfig.app.json       # TypeScript app configuration
+├── tsconfig.node.json      # TypeScript Node configuration
+├── eslint.config.js        # ESLint configuration
+└── index.html              # Vite entry HTML
+```
+
+## Live Demo
+
+URL: <paste deployed link here>
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
