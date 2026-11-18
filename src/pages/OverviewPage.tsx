@@ -90,7 +90,7 @@ function sortableDate(value: string): string {
 }
 
 function formatMoney(amount: number): string {
-  return `$${Math.round(amount).toLocaleString('en-US')}`;
+  return `฿${Math.round(amount).toLocaleString('en-US')}`;
 }
 
 interface StatCardProps {
