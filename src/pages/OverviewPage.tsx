@@ -649,7 +649,7 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
               hint="จำนวนกิจกรรมทั้งหมดจากแท็บ Events รวมกิจกรรมที่เพิ่มในเว็บ"
               icon={CalendarDays}
               onClick={() => setEventsBreakdownOpen(true)}
-              actionLabel="Click to view breakdown by type"
+              actionLabel="คลิกเพื่อดูแยกตามสถานะ"
             />
             <StatCard
               label="Total Budget Used"
@@ -658,7 +658,7 @@ export default function OverviewPage({ onNavigate }: OverviewPageProps) {
               icon={PieChart}
               className="sm:col-span-2 lg:col-span-1"
               onClick={() => setBudgetBreakdownOpen(true)}
-              actionLabel="Click to view breakdown by event"
+              actionLabel="คลิกเพื่อดูแยกตาม Events"
             />
           </div>
 
