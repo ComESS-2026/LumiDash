@@ -102,7 +102,9 @@ export function parseSheetMembers(body: unknown): SheetMembersResult {
     const email = pick(raw, 'email')?.toLowerCase();
     if (email && EMAIL_PATTERN.test(email)) member.email = email;
 
-    const studentId = pick(raw, 'student_id');
+    // Accept several header spellings so the sheet's student id column isn't missed
+    // due to case or spacing (e.g. "student_id", "Student ID", "studentId").
+    const studentId = pick(raw, 'student_id', 'Student ID', 'studentId', 'Student Id', 'student id');
     if (studentId !== undefined) member.student_id = studentId || null;
 
     const role = normalizeRole(pick(raw, 'role'));

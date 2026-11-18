@@ -76,6 +76,17 @@ type Row = Record<string, unknown>;
 const text = (value: unknown): string => String(value ?? '').trim();
 const rowsOf = (value: unknown): Row[] => (Array.isArray(value) ? (value as Row[]) : []);
 
+/** Returns the first non-empty value among the given keys. */
+function pick(row: Row, ...keys: string[]): string {
+  for (const key of keys) {
+    const value = row[key];
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      return String(value).trim();
+    }
+  }
+  return '';
+}
+
 /** "sheet:<id>" for members/events copied from the sheet, "app:<uuid>" for ones made in the app. */
 export function memberKeyOf(item: { id: string; source_id?: string | null }): string {
   return item.source_id ?? `app:${item.id}`;
@@ -154,7 +165,9 @@ export function buildAttendanceSummary(
   const sheetRecords = new Map<string, Map<string, AttendanceStatus>>();
   for (const row of rowsOf(attendanceBody)) {
     const eventId = text(row.event_id);
-    const memberId = text(row.member_id);
+    // Prefer student_id so attendance links up with each member's student id;
+    // fall back to member_id for sheets that still use that column.
+    const memberId = pick(row, 'student_id', 'member_id');
     if (!eventId || !memberId) continue;
     const eventKey = `sheet:${eventId}`;
     const memberKey = `sheet:${memberId}`;
