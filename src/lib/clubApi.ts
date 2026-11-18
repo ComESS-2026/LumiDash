@@ -27,11 +27,20 @@ export async function listMembers(): Promise<Member[]> {
     .order('full_name', { ascending: true });
   assertNoError(error);
   // Normalize student_id so it is always snake_case regardless of whether the
-  // API returns camelCase `studentId` or snake_case `student_id`.
-  return (data ?? []).map((m: any) => ({
-    ...m,
-    student_id: m.student_id ?? m.studentId ?? null,
-  })) as Member[];
+  // API returns camelCase `studentId` or snake_case `student_id`. Some
+  // PostgREST configurations convert column names to camelCase, so check both
+  // spellings and fall back to null when neither is present.
+  return (data ?? []).map((m: any) => {
+    const rawStudentId =
+      m.student_id ??
+      m.studentId ??
+      (typeof m === 'object' && m !== null
+        ? Object.entries(m).find(
+            ([k]) => k.toLowerCase() === 'student_id' || k.toLowerCase() === 'studentid'
+          )?.[1]
+        : null);
+    return { ...m, student_id: rawStudentId == null || rawStudentId === '' ? null : rawStudentId };
+  }) as Member[];
 }
 
 export async function createMember(input: MemberInput): Promise<Member> {
