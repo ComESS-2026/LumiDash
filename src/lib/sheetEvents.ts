@@ -9,6 +9,7 @@ export interface SheetEventImport {
 
 interface SheetEventRow {
   id?: unknown;
+  event_id?: unknown;
   event_name?: unknown;
   date?: unknown;
 }
@@ -32,7 +33,7 @@ export function parseSheetEvents(body: unknown): SheetEventsResult {
   let skipped = 0;
 
   for (const row of body as SheetEventRow[]) {
-    const id = String(row.id ?? '').trim();
+    const id = String(row.id || row.event_id || '').trim();
     const title = String(row.event_name ?? '').trim();
     // A repeated id would make the two rows fight over one event on every sync: keep the first.
     if (id && seen.has(id)) {

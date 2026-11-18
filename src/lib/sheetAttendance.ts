@@ -1,5 +1,6 @@
 import { SHEET_BASE } from './sheet';
 import { parseEventDate } from './alerts';
+import { readStudentId } from './sheetMembers';
 
 export type AttendanceStatus = 'present' | 'late' | 'excused' | 'absent';
 
@@ -32,6 +33,7 @@ export interface AppMemberRef {
   source_id: string | null;
   /** active, inactive or alumni */
   status?: string;
+  student_id?: string | null;
 }
 
 export interface AppEventRef {
@@ -155,22 +157,32 @@ export function buildAttendanceSummary(
   }
 
   const memberKeys = new Set<string>();
+  // student id -> member key, so attendance rows that only carry a student id still reach the right member.
+  const keyByStudentId = new Map<string, string>();
   for (const row of rowsOf(membersBody)) {
-    const id = text(row.id ?? row.member_id);
-    if (id) memberKeys.add(`sheet:${id}`);
+    const id = text(row.id ?? row.member_id) || readStudentId(row) || '';
+    if (!id) continue;
+    memberKeys.add(`sheet:${id}`);
+    const studentId = readStudentId(row);
+    if (studentId) keyByStudentId.set(studentId, `sheet:${id}`);
   }
-  for (const member of app.members) memberKeys.add(memberKeyOf(member));
+  for (const member of app.members) {
+    memberKeys.add(memberKeyOf(member));
+    const studentId = text(member.student_id);
+    if (studentId && !keyByStudentId.has(studentId)) keyByStudentId.set(studentId, memberKeyOf(member));
+  }
 
   // Records from the sheet: eventKey -> (memberKey -> status)
   const sheetRecords = new Map<string, Map<string, AttendanceStatus>>();
   for (const row of rowsOf(attendanceBody)) {
     const eventId = text(row.event_id);
-    // Prefer student_id so attendance links up with each member's student id;
-    // fall back to member_id for sheets that still use that column.
-    const memberId = pick(row, 'student_id', 'member_id');
+    // Link by student id first (looked up in the Members tab / database), then by member_id.
+    // If a student id is not found anywhere, fall back to treating it as the member id.
+    const studentId = readStudentId(row) ?? '';
+    const memberId = studentId || pick(row, 'member_id');
     if (!eventId || !memberId) continue;
     const eventKey = `sheet:${eventId}`;
-    const memberKey = `sheet:${memberId}`;
+    const memberKey = (studentId && keyByStudentId.get(studentId)) || `sheet:${memberId}`;
     memberKeys.add(memberKey);
 
     const status = normalizeAttendanceStatus(row.status);

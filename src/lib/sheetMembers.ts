@@ -45,6 +45,41 @@ function pick(row: Row, ...keys: string[]): string | undefined {
   return undefined;
 }
 
+/** Lower-cases a header and drops spaces, underscores and punctuation: "Student ID " -> "studentid". */
+function normalizeHeader(header: string): string {
+  return header.toLowerCase().replace(/[^a-z0-9\u0E00-\u0E7F]+/g, '');
+}
+
+/** Header spellings that mean "student id" once normalized (English and Thai). */
+const STUDENT_ID_HEADERS = new Set([
+  'studentid',
+  'studentno',
+  'studentnumber',
+  'stdid',
+  'sid',
+  'รหัสนิสิต',
+  'รหัสนักศึกษา',
+  'รหัสประจำตัว',
+  'รหัสประจำตัวนิสิต',
+  'รหัสประจำตัวนักศึกษา',
+]);
+
+/**
+ * Reads the student id from a sheet row whatever the column is called
+ * ("student_id", "Student ID", "StudentID", "student id ", "รหัสนิสิต", ...).
+ * Returns undefined when the row has no such column at all, and "" when the column is empty.
+ */
+export function readStudentId(row: Record<string, unknown>): string | undefined {
+  let found: string | undefined;
+  for (const [header, value] of Object.entries(row)) {
+    if (!STUDENT_ID_HEADERS.has(normalizeHeader(header))) continue;
+    const text = String(value ?? '').trim();
+    if (text) return text; // first non-empty column wins
+    found = '';
+  }
+  return found;
+}
+
 export function normalizeStatus(value: string | undefined): MemberStatus {
   const text = (value ?? '').toLowerCase();
   if (text.includes('alumni') || text.includes('ศิษย์เก่า')) return 'alumni';
@@ -76,7 +111,8 @@ export function parseSheetMembers(body: unknown): SheetMembersResult {
   let skipped = 0;
 
   for (const raw of body as Row[]) {
-    const id = pick(raw, 'id', 'member_id') ?? '';
+    // Sheets without an id column identify each member by their student id.
+    const id = pick(raw, 'id', 'member_id') || readStudentId(raw) || '';
     const fullName = pick(raw, 'name', 'full_name', 'member_name') ?? '';
     // A repeated id would make the two rows fight over one member on every sync: keep the first.
     if (id && seen.has(id)) {
@@ -102,9 +138,7 @@ export function parseSheetMembers(body: unknown): SheetMembersResult {
     const email = pick(raw, 'email')?.toLowerCase();
     if (email && EMAIL_PATTERN.test(email)) member.email = email;
 
-    // Accept several header spellings so the sheet's student id column isn't missed
-    // due to case or spacing (e.g. "student_id", "Student ID", "studentId").
-    const studentId = pick(raw, 'student_id', 'Student ID', 'studentId', 'Student Id', 'student id');
+    const studentId = readStudentId(raw);
     if (studentId !== undefined) member.student_id = studentId || null;
 
     const role = normalizeRole(pick(raw, 'role'));
